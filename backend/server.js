@@ -53,12 +53,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message });
 });
 
-const PORT = process.env.PORT || process.env.SERVER_PORT || 5000;
+const PORT = process.env.PORT || 8080;
 
 initializeDatabase().then(() => {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
-    console.log('Database: thiny_shop.db');
   });
 }).catch((err) => {
   console.error('Failed to initialize database:', err);
