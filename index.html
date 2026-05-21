@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>THINY SHOP · ระบบจัดการขาย + ร้านค้าออนไลน์</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Noto+Sans+Lao:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles-shop.css"/>
+
+  <style>
+    :root {
+      --accent: #0F4C81;
+      --accent-2: #1F6F4A;
+      --accent-3: #C77100;
+    }
+    .dark {
+      --bg-primary: #0F0F12;
+      --bg-secondary: #18181D;
+      --text-primary: #F4F4F0;
+      --text-secondary: #C4B59A;
+    }
+    body {
+      background: #F4F4F0;
+      font-family: "Inter", "IBM Plex Sans Thai", "Noto Sans Lao", system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    body.dark { background: #0F0F12; }
+
+    .page-wrap {
+      min-height: 100vh;
+      position: relative;
+    }
+
+    .stage {
+      position: relative;
+      z-index: 2;
+      padding: 8px;
+      max-width: 100%;
+    }
+
+    /* ========== STAGE LAYOUT — clean, responsive ========== */
+    .stage-layout {
+      max-width: 100%;
+      margin: 0 auto;
+      display: grid;
+      gap: 8px;
+      align-items: start;
+      position: relative;
+    }
+    .stage-layout.device-desktop.view-split {
+      grid-template-columns: 1fr auto;
+    }
+    .stage-layout.device-desktop.view-admin,
+    .stage-layout.device-desktop.view-shop {
+      grid-template-columns: 1fr;
+    }
+
+    .stage-layout.device-ipad,
+    .stage-layout.device-iphone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    @media (max-width: 1024px) {
+      .stage-layout.device-desktop.view-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ========== ADMIN & SHOP CONTAINERS ========== */
+    .lofi-admin-wrap {
+      position: relative;
+      min-width: 0;
+      width: 100%;
+    }
+
+    .lofi-admin-card {
+      background: #FDFCF8;
+      border-radius: 8px;
+      overflow: hidden;
+      border: none;
+      box-shadow: none;
+      transform: none;
+      position: relative;
+    }
+    .dark .lofi-admin-card {
+      background: #18181D;
+    }
+    .lofi-admin-card > .thiny-admin {
+      border-radius: 0;
+      overflow: hidden;
+    }
+
+    .shop-wrap {
+      display: flex;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .lofi-shop-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      padding: 0;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      transform: none;
+      width: 100%;
+      max-width: 402px;
+    }
+    .dark .lofi-shop-card {
+      background: transparent;
+    }
+    .lofi-shop-card .ios-wrap {
+      transform: none;
+    }
+
+    /* Device frames */
+    .lofi-device-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      padding: 0;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      transform: none;
+      position: relative;
+      width: 100%;
+    }
+    .dark .lofi-device-wrap {
+      background: transparent;
+    }
+    .lofi-device-wrap .ipad-wrap,
+    .lofi-device-wrap .iphone-admin-wrap {
+      transform: none;
+    }
+
+    /* Hide decorative elements */
+    .lofi-head,
+    .lofi-footer,
+    .lofi-tape,
+    .lofi-tape-2,
+    .lofi-card-label,
+    .lofi-device-meta,
+    .lofi-device-caption,
+    .lofi-shop-caption,
+    .lofi-shop-meta,
+    .lofi-shop-arrow {
+      display: none !important;
+    }
+
+    /* Loading */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #666;
+      font-family: system-ui, sans-serif;
+      font-size: 16px;
+    }
+
+    .ios-wrap {
+      width: 100%;
+      max-width: 402px;
+      flex-shrink: 0;
+    }
+
+    /* Responsive for mobile */
+    @media (max-width: 768px) {
+      .stage { padding: 4px; }
+      .stage-layout { gap: 4px; }
+      .lofi-admin-card {
+        border-radius: 4px;
+      }
+      .stage-layout.device-desktop.view-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .stage { padding: 0; }
+      .lofi-admin-card {
+        border-radius: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="loading">Loading THINY SHOP…</div>
+  </div>
+
+  <!-- Splash / no-JS fallback used by the standalone bundler -->
+  <template id="__bundler_thumbnail" data-bg-color="#F4F4F0">
+    <svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
+      <rect x="160" y="160" width="280" height="280" rx="56" fill="#0F4C81"/>
+      <text x="300" y="400" font-family="Georgia, 'Times New Roman', serif" font-size="240" font-style="italic" fill="#FFFFFF" text-anchor="middle">T</text>
+      <text x="300" y="500" font-family="Georgia, serif" font-size="40" fill="#2A2520" text-anchor="middle" letter-spacing="6">THINY SHOP</text>
+    </svg>
+  </template>
+
+  <!-- Tweaks defaults — host rewrites this block on disk -->
+  <script id="thiny-tweaks-defaults" type="application/json">
+    /*EDITMODE-BEGIN*/{
+      "dark": false,
+      "accent": "navy",
+      "lang": "th",
+      "view": "admin",
+      "device": "desktop"
+    }/*EDITMODE-END*/
+  </script>
+
+  <!-- Data and i18n -->
+  <!-- Production config — uncomment + แก้ URL ตอน deploy -->
+  <!-- <script>window.__THINY_API_URL__ = 'https://thiny-shop-api.onrender.com/api';</script> -->
+
+  <script src="src/data.js?v=21"></script>
+  <script src="src/i18n.js?v=21"></script>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <!-- Components -->
+  <script type="text/babel" src="ios-frame.jsx?v=28"></script>
+  <script type="text/babel" src="tweaks-panel.jsx?v=28"></script>
+  <script type="text/babel" src="src/shared.jsx?v=28"></script>
+  <script type="text/babel" src="src/auth.jsx?v=28"></script>
+  <script type="text/babel" src="src/admin-shell.jsx?v=28"></script>
+  <script type="text/babel" src="src/admin-screens.jsx?v=28"></script>
+  <script type="text/babel" src="src/admin-chat.jsx?v=28"></script>
+  <script type="text/babel" src="src/shop.jsx?v=28"></script>
+
+  <script type="text/babel" data-presets="env,react">
+
+const { useState, useEffect } = React;
+
+// Defaults (single source of truth for tweaks)
+const TWEAK_DEFAULTS = JSON.parse(
+  document.getElementById('thiny-tweaks-defaults').textContent.
+  replace(/\/\*EDITMODE-BEGIN\*\//, '').
+  replace(/\/\*EDITMODE-END\*\//, '')
+);
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const t = { ...tweaks, setTweak };
+  const lang = t.lang || "th";
+  const langT = window.THINY_I18N[lang];
+  const accClass = `acc-${t.accent || "navy"}`;
+  const darkClass = t.dark ? "dark" : "";
+  const view = t.view || "admin";
+  const device = t.device || "desktop";
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.body.className = `${darkClass} ${accClass} lang-${lang}`;
+  }, [t.dark, t.accent, t.lang]);
+
+  const showAdmin = view === "split" || view === "admin";
+  const showShop = view === "split" || view === "shop";
+
+  const adminInner = <AdminApp t={langT} lang={lang} />;
+  const renderAdmin = () => {
+    if (device === "ipad") {
+      return (
+        <div className="lofi-device-wrap">
+              <div className="lofi-card-label">iPad · admin</div>
+              <div className="lofi-device-meta">
+                <span>iPad · 820×1180</span>
+                <span>Manager</span>
+              </div>
+              <IPadDevice dark={t.dark}>{adminInner}</IPadDevice>
+              <div className="lofi-device-caption">— sidebar ย่อเป็นไอคอน, tap ดูสินค้าได้ตามปกติ</div>
+            </div>);
+
+    }
+    if (device === "iphone") {
+      return (
+        <div className="lofi-device-wrap">
+              <div className="lofi-card-label">iPhone · admin</div>
+              <div className="lofi-device-meta">
+                <span>iOS · 402×874</span>
+                <span>Manager · pocket</span>
+              </div>
+              <div className="iphone-admin-wrap">
+                <IOSDevice width={402} height={874} dark={t.dark}>{adminInner}</IOSDevice>
+              </div>
+              <div className="lofi-device-caption">— เมนูย้ายไปแถบล่าง · จัดสต๊อกได้ขณะเดิน</div>
+            </div>);
+
+    }
+    return (
+      <div className="lofi-admin-wrap">
+            <div className="lofi-tape"></div>
+            <div className="lofi-tape-2"></div>
+            <div className="lofi-card-label">Desktop · admin</div>
+            <div className="lofi-admin-card">{adminInner}</div>
+          </div>);
+
+  };
+
+  return (
+    <div className="page-wrap">
+          <div className="stage">
+            <header className="lofi-head" style={{ fontFamily: "\"Noto Sans Thai\"" }}>
+              <div className="lofi-brand">
+                <div className="lofi-brand-mark">T</div>
+                <div className="lofi-brand-text">
+                  <div className="lofi-brand-name">Thiny <em>Shop</em></div>
+                </div>
+              </div>
+
+              <div className="lofi-tagline" style={{ fontFamily: "\"Noto Sans Thai\"" }}>
+                “จัดการสต๊อกหลายคลัง<br />เชื่อม Shopee · Lazada · TikTok<br />เปิดได้บน iPad &amp; iPhone.”
+              </div>
+
+              <div className="lofi-stamps">
+                <span className="lofi-stamp"><span className="lofi-stamp-dot"></span><strong>Live</strong> prototype</span>
+                <span className="lofi-stamp">{window.THINY_DATA.PRODUCTS.length} SKU &middot; {window.THINY_DATA.LOCATIONS.length} locations</span>
+                <span className="lofi-stamp-date">No. 001 / MAY 20 · 2026</span>
+              </div>
+            </header>
+
+            <main className={`stage-layout device-${device} view-${view}`}>
+              {showAdmin && renderAdmin()}
+
+              {showShop &&
+          <div className="shop-wrap">
+                  <div className="lofi-shop-card">
+                    {device === "desktop" && view === "split" && <div className="lofi-shop-arrow">↗ ลูกค้าเปิดในมือถือ</div>}
+                    <div className="lofi-shop-meta">
+                      <span>iOS · 402×874</span>
+                      <span>Customer</span>
+                    </div>
+                    <div className="ios-wrap">
+                      <IOSDevice width={402} height={874} dark={t.dark}>
+                        <ShopApp t={langT} lang={lang} />
+                      </IOSDevice>
+                    </div>
+                    <div className="lofi-shop-caption">— เลื่อนดู &middot; แตะสินค้า &middot; ใส่ตะกร้าได้จริง</div>
+                  </div>
+                </div>
+          }
+            </main>
+
+            <footer className="lofi-footer">
+              <div className="lofi-footer-marks">
+                <span className="lofi-footer-mark"><strong>THINY</strong> SHOP</span>
+                <span className="lofi-footer-dot"></span>
+                <span>Vol. 01 · Issue 26</span>
+                <span className="lofi-footer-dot"></span>
+                <span>Made with paper &amp; pixels</span>
+              </div>
+              <div className="lofi-footer-marks">
+                <span>Press <strong>Tweaks</strong> →</span>
+                <span className="lofi-footer-dot"></span>
+                <span>TH · EN · ລາວ</span>
+              </div>
+            </footer>
+          </div>
+
+          {/* Tweaks panel removed — keep tweaks state for compatibility but no UI */}
+
+        </div>);
+
+}
+
+// ============= iPad device frame (inline) =============
+function IPadDevice({ children, dark = false, width = 820, height = 1180 }) {
+  const bezel = 26;
+  return (
+    <div style={{
+      width: width + bezel * 2,
+      height: height + bezel * 2,
+      borderRadius: 40,
+      background: dark ? "#0F0F12" : "#1C1C1E",
+      padding: bezel,
+      boxShadow: "0 24px 60px rgba(0,0,0,0.28), inset 0 0 0 1.5px rgba(255,255,255,0.05), 0 0 0 1.5px rgba(0,0,0,0.6)",
+      boxSizing: "content-box",
+      position: "relative",
+      fontFamily: "-apple-system, system-ui, sans-serif"
+    }}>
+          <div style={{
+        position: "absolute", top: bezel / 2 - 3, left: "50%",
+        transform: "translateX(-50%)",
+        width: 6, height: 6, borderRadius: "50%",
+        background: "#0A0A0A", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)"
+      }} />
+          <div style={{
+        width, height, borderRadius: 6,
+        overflow: "hidden",
+        background: dark ? "#000" : "#fff",
+        position: "relative"
+      }}>
+            {children}
+          </div>
+        </div>);
+
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>

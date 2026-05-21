@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>THINY SHOP · ระบบจัดการขาย + ร้านค้าออนไลน์</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Noto+Sans+Lao:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles-shop.css"/>
+
+  <style>
+    /* Page-only chrome */
+    .page-wrap { min-height: 100vh; }
+
+    .stage-meta-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-ok); display: inline-block; box-shadow: 0 0 8px var(--c-ok); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    /* iOS device wrapper override for our shop */
+    .ios-wrap { width: 402px; flex-shrink: 0; }
+
+    /* Loading */
+    .loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; color: var(--c-fg-3); font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="loading">Loading THINY SHOP…</div>
+  </div>
+
+  <!-- Tweaks defaults — host rewrites this block on disk -->
+  <script id="thiny-tweaks-defaults" type="application/json">
+    /*EDITMODE-BEGIN*/{
+      "dark": false,
+      "accent": "navy",
+      "lang": "th",
+      "view": "split"
+    }/*EDITMODE-END*/
+  </script>
+
+  <!-- Data and i18n -->
+  <script src="src/data.js"></script>
+  <script src="src/i18n.js"></script>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <!-- Components -->
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="src/shared.jsx"></script>
+  <script type="text/babel" src="src/admin-shell.jsx"></script>
+  <script type="text/babel" src="src/admin-screens.jsx"></script>
+  <script type="text/babel" src="src/shop.jsx"></script>
+
+  <script type="text/babel" data-presets="env,react">
+    const { useState, useEffect } = React;
+
+    // Defaults (single source of truth for tweaks)
+    const TWEAK_DEFAULTS = JSON.parse(
+      document.getElementById('thiny-tweaks-defaults').textContent
+        .replace(/\/\*EDITMODE-BEGIN\*\//, '')
+        .replace(/\/\*EDITMODE-END\*\//, '')
+    );
+
+    function App() {
+      const t = useTweaks(TWEAK_DEFAULTS);
+      const lang = t.lang || "th";
+      const langT = window.THINY_I18N[lang];
+      const accClass = `acc-${t.accent || "navy"}`;
+      const darkClass = t.dark ? "dark" : "";
+      const view = t.view || "split";
+
+      useEffect(() => {
+        document.documentElement.lang = lang;
+        document.body.className = `${darkClass} ${accClass} lang-${lang}`;
+      }, [t.dark, t.accent, t.lang]);
+
+      const showAdmin = view === "split" || view === "admin";
+      const showShop  = view === "split" || view === "shop";
+
+      return (
+        <div className="page-wrap">
+          <div className="stage">
+            <header className="stage-head">
+              <div className="stage-brand">
+                <div className="stage-brand-mark">T</div>
+                <div>
+                  <div className="stage-brand-name">THINY SHOP</div>
+                  <div className="stage-brand-sub">ระบบจัดการขาย + ร้านค้าออนไลน์</div>
+                </div>
+              </div>
+              <div className="stage-meta">
+                <span className="pill"><span className="stage-meta-dot"></span> <strong>Live</strong> demo</span>
+                <span className="pill">{window.THINY_DATA.PRODUCTS.length} SKU · {window.THINY_DATA.LOCATIONS.length} locations</span>
+                <span className="pill">Shopee · Lazada · TikTok</span>
+              </div>
+            </header>
+
+            <main className={`stage-layout view-${view}`}>
+              {showAdmin && (
+                <div className="stage-card">
+                  <div className="stage-card-head">
+                    <div className="stage-card-tlights"><span/><span/><span/></div>
+                    <div className="stage-card-url">app.thinyshop.co · admin</div>
+                    <div className="stage-card-tag">Desktop · Admin</div>
+                  </div>
+                  <AdminApp t={langT} lang={lang}/>
+                </div>
+              )}
+
+              {showShop && (
+                <div className="shop-wrap">
+                  <div className="shop-wrap-inner">
+                    <div className="ios-wrap">
+                      <IOSDevice width={402} height={874} dark={t.dark}>
+                        <ShopApp t={langT} lang={lang}/>
+                      </IOSDevice>
+                    </div>
+                    <div className="shop-wrap-label">Mobile · Customer shop</div>
+                  </div>
+                </div>
+              )}
+            </main>
+          </div>
+
+          <TweaksPanel title="Tweaks · THINY SHOP">
+            <TweakSection label="Theme">
+              <TweakToggle
+                label="Dark mode"
+                value={t.dark}
+                onChange={v => t.setTweak('dark', v)}
+              />
+              <TweakRadio
+                label="Accent"
+                value={t.accent}
+                options={[
+                  { label: 'Navy',   value: 'navy' },
+                  { label: 'Forest', value: 'forest' },
+                  { label: 'Coral',  value: 'coral' },
+                ]}
+                onChange={v => t.setTweak('accent', v)}
+              />
+            </TweakSection>
+            <TweakSection label="Language">
+              <TweakRadio
+                label="UI language"
+                value={t.lang}
+                options={[
+                  { label: 'ไทย',     value: 'th' },
+                  { label: 'English', value: 'en' },
+                  { label: 'ລາວ',     value: 'lo' },
+                ]}
+                onChange={v => t.setTweak('lang', v)}
+              />
+            </TweakSection>
+            <TweakSection label="Layout">
+              <TweakRadio
+                label="View"
+                value={view}
+                options={[
+                  { label: 'Both',    value: 'split' },
+                  { label: 'Admin',   value: 'admin' },
+                  { label: 'Shop',    value: 'shop' },
+                ]}
+                onChange={v => t.setTweak('view', v)}
+              />
+            </TweakSection>
+          </TweaksPanel>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App/>);
+  </script>
+</body>
+</html>

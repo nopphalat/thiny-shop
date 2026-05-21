@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+
+# Database (use Turso/cloud in production)
+backend/thiny_shop.db
+backend/*.db
+backend/*.db-journal
+backup-*.sql
+dump.sql
+
+# Environment
+.env
+.env.local
+.env.production
+backend/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Claude Code local settings
+.claude/
+
+# Temp files
+tmp/
+*.tmp

@@ -1,0 +1,26 @@
+# Render.com deployment config
+# Place this at the ROOT of the backend folder
+# When deploying: set Root Directory = "backend" in Render dashboard
+
+services:
+  - type: web
+    name: thiny-shop-api
+    runtime: node
+    plan: free
+    region: singapore   # ใกล้ไทยที่สุด (หรือ oregon ถ้าจะใช้ usa)
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    autoDeploy: true    # auto deploy เมื่อ push ไป GitHub
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: SERVER_PORT
+        value: "5000"
+      # ตั้งค่าเหล่านี้เองใน Render Dashboard (Secret)
+      - key: TURSO_URL
+        sync: false   # libsql://thiny-shop-yourname.turso.io
+      - key: TURSO_AUTH_TOKEN
+        sync: false   # token from `turso db tokens create`
+      - key: CORS_ORIGIN
+        sync: false   # https://thiny-shop.pages.dev (frontend URL)
