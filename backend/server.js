@@ -53,7 +53,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message });
 });
 
-const PORT = process.env.SERVER_PORT || 5000;
+const PORT = process.env.PORT || process.env.SERVER_PORT || 5000;
 
 initializeDatabase().then(() => {
   app.listen(PORT, () => {
