@@ -93,9 +93,9 @@ const NAV = [
 { id: "dashboard", icon: "dashboard" },
 { id: "products", icon: "products" },
 { id: "chatOrders", icon: "chat", badge: 2 },
+{ id: "scan", icon: "scan" },
 { id: "calendar", icon: "movement" },
 { id: "customers", icon: "customers" },
-{ id: "scan", icon: "scan" },
 { id: "finance", icon: "reports" },
 { id: "reports", icon: "reports" },
 { id: "settings", icon: "settings" }];
