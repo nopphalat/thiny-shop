@@ -291,7 +291,7 @@ async function loadDataFromAPI() {
     const MOVEMENTS = transformMovements(apiMovements);
     const CUSTOMERS = transformCustomers(apiCustomers);
     const liveChatOrders = transformChatOrders(apiChatOrders);
-    const finalChatOrders = liveChatOrders.length > 0 ? liveChatOrders : CHAT_ORDERS;
+    const finalChatOrders = liveChatOrders; // always use API data (empty = no orders)
 
     console.log('[THINY] Loaded from API:', PRODUCTS.length, 'products,', LOCATIONS.length, 'locations,', CUSTOMERS.length, 'customers,', liveChatOrders.length, 'chat orders');
 
@@ -425,11 +425,7 @@ function loadStoredChatOrders() {
 }
 
 function applyStoredChatOrders(data) {
-  const stored = loadStoredChatOrders();
-  if (stored && stored.length > 0 && (!data.CHAT_ORDERS || data.CHAT_ORDERS.length === 0)) {
-    data.CHAT_ORDERS = stored;
-    console.log('[THINY] ✓ Restored', stored.length, 'chat orders from localStorage (offline fallback)');
-  }
+  // localStorage fallback disabled — API is authoritative; empty = no orders
   return data;
 }
 
