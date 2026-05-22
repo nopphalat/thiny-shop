@@ -960,11 +960,22 @@ const ScreenScan = ({ t, lang }) => {
     if (!cameraActive) return;
     let scanner;
     try {
-      scanner = new window.Html5Qrcode("thiny-camera-view");
+      // จำกัดเฉพาะ format ที่ใช้บนพัสดุไทย → เร็วกว่าสแกนทุก format ~5x
+      const fmts = window.Html5QrcodeSupportedFormats;
+      scanner = new window.Html5Qrcode("thiny-camera-view", {
+        formatsToSupport: fmts ? [
+          fmts.CODE_128,  // Shopee, Lazada, Flash, J&T, Kerry
+          fmts.CODE_39,
+          fmts.CODE_93,
+          fmts.ITF,
+          fmts.EAN_13,
+        ] : undefined,
+        verbose: false,
+      });
       scannerRef.current = scanner;
       scanner.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 280, height: 120 } },
+        { fps: 30, qrbox: { width: 300, height: 80 }, aspectRatio: 1.7778 },
         (decodedText) => {
           // เสียงสัญญาณสแกนสำเร็จ
           if (window.AudioContext || window.webkitAudioContext) {
