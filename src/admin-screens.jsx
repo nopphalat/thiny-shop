@@ -799,6 +799,10 @@ const ScreenScan = ({ t, lang }) => {
   // Unassigned-tracking flow: when scan finds no match, prompt user to pick a pending order
   const [pendingAssign, setPendingAssign] = useStateB(null); // { tracking, candidates }
   const [, forceUpdate] = useStateB(0);
+  // Real camera scanner state
+  const [cameraActive, setCameraActive] = useStateB(false);
+  const [cameraError, setCameraError] = useStateB(null);
+  const scannerRef = React.useRef(null);
   const { PRODUCTS, CHAT_ORDERS, CHANNELS } = window.THINY_DATA;
 
   // Look up a tracking number against pre-order CHAT_ORDERS
@@ -927,6 +931,74 @@ const ScreenScan = ({ t, lang }) => {
     if (window.logAudit) window.logAudit("mark_paid", "chat_order", matched.order.id, matched.order.customer?.name);
     forceUpdate(n => n + 1);
   };
+
+  // ===== Camera functions =====
+  const startCamera = () => {
+    if (!window.Html5Qrcode) {
+      setCameraError("กรุณารอสักครู่แล้วลองใหม่");
+      return;
+    }
+    setCameraError(null);
+    setCameraActive(true);
+  };
+
+  const stopCamera = () => {
+    if (scannerRef.current) {
+      scannerRef.current.stop().catch(() => {}).finally(() => {
+        if (scannerRef.current) {
+          try { scannerRef.current.clear(); } catch(e) {}
+        }
+        scannerRef.current = null;
+        setCameraActive(false);
+      });
+    } else {
+      setCameraActive(false);
+    }
+  };
+
+  useEffectB(() => {
+    if (!cameraActive) return;
+    let scanner;
+    try {
+      scanner = new window.Html5Qrcode("thiny-camera-view");
+      scannerRef.current = scanner;
+      scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 280, height: 120 } },
+        (decodedText) => {
+          // เสียงสัญญาณสแกนสำเร็จ
+          if (window.AudioContext || window.webkitAudioContext) {
+            try {
+              const ctx = new (window.AudioContext || window.webkitAudioContext)();
+              const osc = ctx.createOscillator();
+              osc.connect(ctx.destination);
+              osc.frequency.value = 880;
+              osc.start(); osc.stop(ctx.currentTime + 0.1);
+            } catch(e) {}
+          }
+          lookupTracking(decodedText);
+          scanner.stop().catch(() => {});
+          scannerRef.current = null;
+          setCameraActive(false);
+        },
+        () => {} // scan errors are normal (frames without barcode)
+      ).catch(err => {
+        const msg = err && err.message ? err.message : String(err);
+        setCameraError("ไม่สามารถเปิดกล้องได้ · " + msg);
+        setCameraActive(false);
+        scannerRef.current = null;
+      });
+    } catch(e) {
+      setCameraError("เกิดข้อผิดพลาด: " + e.message);
+      setCameraActive(false);
+    }
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.stop().catch(() => {});
+        scannerRef.current = null;
+      }
+    };
+  }, [cameraActive]);
 
   // Quick demo lists — adapt based on mode
   const incomingPending = CHAT_ORDERS.filter(o => o.sourceTracking && (o.status === "ordered" || o.status === "paid"));
@@ -1176,22 +1248,57 @@ const ScreenScan = ({ t, lang }) => {
           </div>
 
           <div className="thiny-card-title">สแกนด้วยกล้องมือถือ</div>
-          <div className="thiny-card-sub">เปิดบนมือถือเพื่อใช้กล้องสแกนบาร์โค้ดบนพัสดุ</div>
+          <div className="thiny-card-sub">กดปุ่มเปิดกล้อง แล้วชี้ไปที่บาร์โค้ดบนพัสดุ</div>
           <div className="thiny-scan-phone">
-            <div className="thiny-scan-cam">
-              <div className={`thiny-scan-frame ${pulse ? "pulse" : ""}`}>
-                <div className="thiny-scan-corners"></div>
-                <div className="thiny-scan-line"></div>
-                <svg className="thiny-scan-barcode" viewBox="0 0 200 80" preserveAspectRatio="none">
-                  {[3,2,4,1,3,5,2,3,1,4,2,3,5,1,4,2,3,1,4,3,2,5,1,3,2,4,1,3,5,2].map((w,i,a) => {
-                    let x = 0;
-                    for (let j = 0; j < i; j++) x += a[j] * 2 + 2;
-                    return <rect key={i} x={x} y={20} width={w*2} height={40} fill="rgba(255,255,255,0.92)"/>;
-                  })}
-                </svg>
-              </div>
-              <div className="thiny-scan-hint">ชี้กล้องไปที่บาร์โค้ดบนพัสดุ</div>
+            <div className="thiny-scan-cam" style={{ position: "relative", minHeight: 200, background: "#111", borderRadius: 10, overflow: "hidden" }}>
+              {/* html5-qrcode renders the video feed into this div */}
+              <div id="thiny-camera-view" style={{ width: "100%" }}></div>
+
+              {/* Overlay when camera is off */}
+              {!cameraActive && (
+                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, background: "#1a1a1a" }}>
+                  <svg viewBox="0 0 200 80" style={{ width: "55%", opacity: 0.3 }} preserveAspectRatio="none">
+                    {[3,2,4,1,3,5,2,3,1,4,2,3,5,1,4,2,3,1,4,3,2,5,1,3,2,4,1,3,5,2].map((w,i,a) => {
+                      let x = 0;
+                      for (let j = 0; j < i; j++) x += a[j] * 2 + 2;
+                      return <rect key={i} x={x} y={20} width={w*2} height={40} fill="white"/>;
+                    })}
+                  </svg>
+                  <button
+                    onClick={startCamera}
+                    style={{ padding: "12px 32px", background: "#0F4C81", color: "white", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(15,76,129,0.5)" }}
+                  >
+                    📷 เปิดกล้อง
+                  </button>
+                  {cameraError && (
+                    <div style={{ color: "#FF6B6B", fontSize: 12, textAlign: "center", padding: "0 20px", lineHeight: 1.5 }}>
+                      ⚠️ {cameraError}
+                    </div>
+                  )}
+                  <div style={{ color: "#555", fontSize: 11 }}>หรือพิมพ์เลข tracking ด้านบน</div>
+                </div>
+              )}
+
+              {/* Stop button overlay when camera is on */}
+              {cameraActive && (
+                <div style={{ position: "absolute", top: 8, right: 8, zIndex: 20 }}>
+                  <button
+                    onClick={stopCamera}
+                    style={{ padding: "6px 14px", background: "rgba(0,0,0,0.75)", color: "white", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer", fontWeight: 600 }}
+                  >
+                    ✕ ปิด
+                  </button>
+                </div>
+              )}
+
+              {/* Scan guide line overlay */}
+              {cameraActive && (
+                <div style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}>
+                  <div style={{ width: "80%", height: 2, background: "rgba(255,60,60,0.8)", boxShadow: "0 0 8px rgba(255,60,60,0.6)" }}></div>
+                </div>
+              )}
             </div>
+
             <div className="thiny-scan-controls">
               <button className={`thiny-scan-mode ${mode === "in" ? "active" : ""}`} onClick={() => setMode("in")}>
                 <Icon name="arrowDown" size={14}/> รับเข้า
