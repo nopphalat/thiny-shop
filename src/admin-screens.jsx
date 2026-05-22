@@ -969,13 +969,14 @@ const ScreenScan = ({ t, lang }) => {
           fmts.CODE_93,
           fmts.ITF,
           fmts.EAN_13,
+          fmts.QR_CODE,   // QR code ทั่วไป
         ] : undefined,
         verbose: false,
       });
       scannerRef.current = scanner;
       scanner.start(
         { facingMode: "environment" },
-        { fps: 30, qrbox: { width: 300, height: 80 }, aspectRatio: 1.7778 },
+        { fps: 30, qrbox: { width: 260, height: 260 }, aspectRatio: 1.7778 },
         (decodedText) => {
           // เสียงสัญญาณสแกนสำเร็จ
           if (window.AudioContext || window.webkitAudioContext) {
