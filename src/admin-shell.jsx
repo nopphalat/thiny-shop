@@ -5,8 +5,18 @@ const { useState, useMemo } = React;
 
 // AddProductModal component
 const AddProductModal = ({ t, onClose }) => {
-  const [form, setForm] = useState({ id: "", sku: "", name_th: "", name_en: "", price: "", cost: "", barcode: "", quantity: "" });
+  // Category options — must match SKU_CAT mapping in data.js
+  const CATEGORY_OPTIONS = [
+    { id: "fashion",     prefix: "FW", label: "👗 แฟชั่น" },
+    { id: "beauty",      prefix: "BT", label: "💄 ความงาม" },
+    { id: "home",        prefix: "HM", label: "🏠 ของใช้ในบ้าน" },
+    { id: "food",        prefix: "FD", label: "🍱 อาหาร" },
+    { id: "electronics", prefix: "EL", label: "📱 อิเล็กทรอนิกส์" },
+  ];
+  const [form, setForm] = useState({ id: "", sku: "", name_th: "", name_en: "", price: "", cost: "", barcode: "", quantity: "", category: "fashion" });
   const [loading, setLoading] = useState(false);
+  const cat = CATEGORY_OPTIONS.find(c => c.id === form.category) || CATEGORY_OPTIONS[0];
+
   const inp = (field, placeholder, type = "text", label) => (
     <div style={{ marginBottom: 14 }}>
       <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 600 }}>{label}</label>
@@ -16,6 +26,13 @@ const AddProductModal = ({ t, onClose }) => {
     </div>
   );
 
+  // Auto-build SKU from category prefix + ID (so category detection works in data.js)
+  const buildSku = () => {
+    if (form.sku) return form.sku.toUpperCase();
+    const idPart = (form.id || "").replace(/[^A-Z0-9]/gi, "").toUpperCase() || String(Date.now()).slice(-4);
+    return `TS-${cat.prefix}-${idPart}`;
+  };
+
   const handleAddProduct = async () => {
     if (!form.id || !form.name_th || !form.price) {
       alert("กรุณากรอก: ID, ชื่อสินค้า, ราคา");
@@ -23,13 +40,14 @@ const AddProductModal = ({ t, onClose }) => {
     }
     setLoading(true);
     try {
+      const finalSku = buildSku();
       // 1. สร้างสินค้า
       const res = await fetch(window.API_BASE + "/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: form.id.toUpperCase(),
-          sku: form.sku || form.id.toUpperCase(),
+          sku: finalSku,
           name_th: form.name_th,
           name_en: form.name_en || form.name_th,
           name_lo: "",
@@ -52,11 +70,11 @@ const AddProductModal = ({ t, onClose }) => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ product_id: form.id.toUpperCase(), location_id: loc.id, quantity: qty }),
-          }).catch(() => {}); // stock route may use PUT — try POST first
+          }).catch(() => {});
         }
       }
 
-      alert("✅ เพิ่มสินค้าสำเร็จ" + (qty > 0 ? ` · สต๊อก ${qty} ชิ้น` : ""));
+      alert(`✅ เพิ่มสินค้าสำเร็จ\n${cat.label} · SKU: ${finalSku}${qty > 0 ? ` · สต๊อก ${qty} ชิ้น` : ""}`);
       onClose();
       window.location.reload();
     } catch (e) {
@@ -70,10 +88,34 @@ const AddProductModal = ({ t, onClose }) => {
       <div style={{ background: "white", borderRadius: 14, padding: 28, width: "90%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
         <h2 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 700 }}>+ เพิ่มสินค้าใหม่</h2>
 
+        {/* Category picker */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 600 }}>หมวดหมู่ *</label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+            {CATEGORY_OPTIONS.map(c => (
+              <button key={c.id} type="button" onClick={() => setForm({...form, category: c.id})}
+                style={{
+                  padding: "10px 12px",
+                  border: form.category === c.id ? "2px solid #0F4C81" : "1px solid #ddd",
+                  background: form.category === c.id ? "#E8EEF6" : "white",
+                  borderRadius: 8, fontSize: 13, cursor: "pointer",
+                  fontWeight: form.category === c.id ? 700 : 500, textAlign: "left",
+                }}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>{inp("id", "P001", "text", "ID สินค้า *")}</div>
-          <div>{inp("sku", "TS-XXX-001", "text", "SKU")}</div>
+          <div>{inp("sku", `TS-${cat.prefix}-XXX (สร้างอัตโนมัติ)`, "text", "SKU (ไม่บังคับ)")}</div>
         </div>
+        {!form.sku && form.id && (
+          <div style={{ padding: "6px 12px", background: "#F0F7FF", borderRadius: 6, fontSize: 11, color: "#0F4C81", marginBottom: 12, marginTop: -6 }}>
+            🏷️ SKU จะสร้างให้เป็น: <strong>{buildSku()}</strong>
+          </div>
+        )}
         {inp("name_th", "ชื่อสินค้าภาษาไทย", "text", "ชื่อสินค้า (ไทย) *")}
         {inp("name_en", "Product name", "text", "ชื่อสินค้า (English)")}
         {inp("barcode", "8851234567000", "text", "Barcode")}
