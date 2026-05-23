@@ -203,8 +203,38 @@
 </head>
 <body>
   <div id="root">
-    <div class="loading">Loading THINY SHOP…</div>
+    <div class="loading" id="loading-screen">
+      <div style="text-align:center;">
+        <div style="margin-bottom:20px;">Loading THINY SHOP…</div>
+        <div id="loading-progress" style="font-size:11px;color:#888;font-family:monospace;"></div>
+        <div id="loading-fallback" style="display:none;margin-top:24px;">
+          <div style="color:#c00;font-size:13px;margin-bottom:12px;">⚠️ โหลดนานผิดปกติ · เน็ตอาจมีปัญหา</div>
+          <button onclick="location.reload(true)" style="padding:10px 24px;background:#0F4C81;color:white;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;">🔄 โหลดใหม่</button>
+        </div>
+      </div>
+    </div>
   </div>
+  <script>
+    // ติดตามสถานะโหลด + แสดงปุ่ม retry ถ้าเกิน 15 วินาที
+    (function(){
+      var steps = { react: false, babel: false, mounted: false };
+      var elProgress = document.getElementById('loading-progress');
+      var elFallback = document.getElementById('loading-fallback');
+      var start = Date.now();
+      function check() {
+        if (window.React) steps.react = true;
+        if (window.Babel) steps.babel = true;
+        var status = (steps.react?'✓':'·')+' React  '+(steps.babel?'✓':'·')+' Babel  ('+((Date.now()-start)/1000).toFixed(1)+'s)';
+        if (elProgress) elProgress.textContent = status;
+        if (Date.now() - start > 15000 && elFallback) elFallback.style.display = 'block';
+      }
+      var iv = setInterval(function(){
+        check();
+        if (!document.getElementById('loading-screen')) clearInterval(iv);
+      }, 500);
+      check();
+    })();
+  </script>
 
   <!-- Splash / no-JS fallback used by the standalone bundler -->
   <template id="__bundler_thumbnail" data-bg-color="#F4F4F0">
@@ -233,12 +263,16 @@
   <script src="src/data.js?v=22"></script>
   <script src="src/i18n.js?v=21"></script>
 
-  <!-- React + Babel (production builds — ~10x smaller than dev builds) -->
-  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+  <!-- Preconnect to CDN for faster fetch -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+
+  <!-- React + Babel via jsDelivr (faster edge in Thailand/Laos than unpkg) -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
   <!-- Barcode / QR scanner library for real camera scanning -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" crossorigin="anonymous"></script>
 
   <!-- Components -->
   <script type="text/babel" src="ios-frame.jsx?v=28"></script>
