@@ -1476,17 +1476,19 @@ const EditProductModal = ({ product, onClose, onDone }) => {
 
   const cat = CATS.find(c => c.id === form.category) || CATS[0];
 
-  // ถ้าเปลี่ยน category → ปรับ SKU prefix อัตโนมัติ
+  // ถ้าเปลี่ยน category → ปรับ SKU prefix อัตโนมัติ (รองรับ SKU ทุกรูปแบบ)
   const handleCategoryChange = (newCatId) => {
     const newCat = CATS.find(c => c.id === newCatId);
     if (!newCat) return;
-    // ดูว่า SKU ปัจจุบันมี prefix รูปแบบ TS-XX-... หรือไม่ ถ้ามีก็เปลี่ยน
-    const m = form.sku.match(/^(TS)-([A-Z]{2})-(.+)$/);
+    // 1) ถ้าเป็นรูปแบบ TS-XX-suffix → เปลี่ยนแค่ส่วน prefix
+    const m = form.sku.match(/^(TS)-([A-Z]{2})-(.+)$/i);
     if (m) {
       setForm({ ...form, category: newCatId, sku: `TS-${newCat.prefix}-${m[3]}` });
-    } else {
-      setForm({ ...form, category: newCatId });
+      return;
     }
+    // 2) ไม่ใช่รูปแบบนั้น → สร้าง SKU ใหม่จาก product id (เพื่อให้ category detect ทำงานได้)
+    const idPart = (product.id || "").replace(/[^A-Z0-9]/gi, "").toUpperCase() || String(Date.now()).slice(-4);
+    setForm({ ...form, category: newCatId, sku: `TS-${newCat.prefix}-${idPart}` });
   };
 
   const inp = (field, placeholder, type = "text") => (
@@ -1581,8 +1583,13 @@ const EditProductModal = ({ product, onClose, onDone }) => {
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>SKU</label>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>SKU <span style={{ color: "#888", fontWeight: 400, fontSize: 11 }}>(prefix กำหนดหมวดหมู่)</span></label>
           {inp("sku", "TS-FW-001")}
+          {form.category !== currentCat && (
+            <div style={{ padding: "6px 10px", background: "#FFF8E1", borderRadius: 6, fontSize: 11, color: "#8B5A00", marginTop: 5 }}>
+              ⚡ เปลี่ยนหมวดเป็น <strong>{cat.label}</strong> · SKU ใหม่: <code style={{ background: "white", padding: "1px 5px", borderRadius: 3 }}>{form.sku}</code>
+            </div>
+          )}
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>ชื่อสินค้า (ไทย) *</label>
