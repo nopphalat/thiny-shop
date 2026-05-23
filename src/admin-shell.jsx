@@ -60,7 +60,7 @@ const AddProductModal = ({ t, onClose }) => {
       });
       if (!res.ok) { alert("เกิดข้อผิดพลาด: " + (await res.text())); setLoading(false); return; }
 
-      // 2. เพิ่มสต๊อกเริ่มต้น (ถ้ากรอกจำนวน)
+      // 2. เพิ่มสต๊อกเริ่มต้น (ถ้ากรอกจำนวน) + movement
       const qty = parseInt(form.quantity) || 0;
       if (qty > 0) {
         const locs = window.THINY_DATA?.LOCATIONS || [];
@@ -71,6 +71,7 @@ const AddProductModal = ({ t, onClose }) => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ product_id: form.id.toUpperCase(), location_id: loc.id, quantity: qty }),
           }).catch(() => {});
+          await logMovement({ type: "in", productId: form.id.toUpperCase(), qty, locationId: loc.id, refId: "init-stock" });
         }
       }
 
@@ -356,10 +357,6 @@ const AdminApp = ({ t, lang }) => {
             <button className="thiny-icon-btn" title="Sync" onClick={() => window.location.reload()}>
               <Icon name="refresh" size={18} />
             </button>
-            <button className="thiny-icon-btn thiny-bell" title="Alerts" onClick={() => alert('ยังไม่มีการแจ้งเตือนใหม่')}>
-              <Icon name="bell" size={18} />
-              <span className="thiny-dot"></span>
-            </button>
             {/* User menu with logout */}
             <UserMenu user={currentUser} onLogout={handleLogout} />
           </div>
@@ -470,11 +467,6 @@ const ScreenDashboard = ({ t, lang, goto }) => {
         <div>
           <h1 className="thiny-h1">ภาพรวมร้าน</h1>
           <p className="thiny-sub">สรุปงาน Pre-order · <span style={{ color: "var(--c-ok)" }}>● Live</span> · {new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" })}</p>
-        </div>
-        <div className="thiny-seg">
-          <button className="active" onClick={() => console.log('Today')}>{t.common.today}</button>
-          <button onClick={() => console.log('Week')}>{t.common.week}</button>
-          <button onClick={() => console.log('Month')}>{t.common.month}</button>
         </div>
       </div>
 
@@ -756,6 +748,28 @@ const MoveTag = ({ type, t }) => {
 };
 
 // ---------------- PRODUCTS ----------------
+// ============= MOVEMENT helper =============
+// บันทึก movement (in/out/transfer) เพื่อให้ประวัติการเคลื่อนไหวมีข้อมูล
+async function logMovement({ type, productId, qty, locationId, refId, userName }) {
+  try {
+    const user = (typeof window.getAuthUser === "function" ? window.getAuthUser() : null);
+    await fetch(window.API_BASE + "/movements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "M-" + Date.now().toString().slice(-8) + "-" + Math.random().toString(36).slice(2,5).toUpperCase(),
+        type,                                                            // 'in' | 'out' | 'adjust' | 'transfer'
+        product_id: productId,
+        quantity: qty,
+        from_location_id: type === "out" ? locationId : null,
+        to_location_id: type === "in" ? locationId : null,
+        user_name: userName || user?.name || user?.username || "Owner",
+        reference_id: refId || "",
+      }),
+    });
+  } catch (e) { console.warn("logMovement failed:", e.message); }
+}
+
 // ============= PRINT RECEIPT helper =============
 function printReceipt({ orderId, date, items, subtotal, discount, discountLabel, total, custName, custPhone, channel, note, lang = "th" }) {
   const channelLabels = { walkin: "หน้าร้าน", line: "LINE", fb: "Facebook", ig: "Instagram", tiktok: "TikTok", other: "อื่นๆ" };
@@ -934,7 +948,7 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
         return;
       }
 
-      // 3. หักสต๊อกทุกตัว
+      // 3. หักสต๊อก + บันทึก movement ทุกตัว
       for (const item of cart) {
         const current = item.product.stockByLoc?.[loc.id] || 0;
         const newQty = Math.max(0, current - item.qty);
@@ -945,6 +959,7 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
         }).catch(() => {});
         item.product.stockByLoc = item.product.stockByLoc || {};
         item.product.stockByLoc[loc.id] = newQty;
+        await logMovement({ type: "out", productId: item.id, qty: item.qty, locationId: loc.id, refId: orderId });
       }
 
       if (window.logAudit) {
@@ -1175,9 +1190,32 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
 const ScreenProducts = ({ t, lang, onPick, onAdd }) => {
   const { PRODUCTS, CATEGORIES } = window.THINY_DATA;
   const [cat, setCat] = useState("all");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("name"); // name | price-low | price-high | stock-low | stock-high
   const [showMultiSell, setShowMultiSell] = useState(false);
 
-  const filtered = cat === "all" ? PRODUCTS : PRODUCTS.filter((p) => p.category === cat);
+  // Filter + search
+  const searchLower = search.trim().toLowerCase();
+  let filtered = cat === "all" ? PRODUCTS : PRODUCTS.filter((p) => p.category === cat);
+  if (searchLower) {
+    filtered = filtered.filter(p => [
+      p.id, p.sku, p.barcode, p.name?.th, p.name?.en, p.name?.lo,
+    ].filter(Boolean).join(" ").toLowerCase().includes(searchLower));
+  }
+
+  // Sort
+  const stockOf = (p) => Object.values(p.stockByLoc || {}).reduce((a, b) => a + b, 0);
+  filtered = [...filtered].sort((a, b) => {
+    if (sortBy === "name") return (a.name?.[lang] || a.name?.th || "").localeCompare(b.name?.[lang] || b.name?.th || "");
+    if (sortBy === "price-low") return (a.price || 0) - (b.price || 0);
+    if (sortBy === "price-high") return (b.price || 0) - (a.price || 0);
+    if (sortBy === "stock-low") return stockOf(a) - stockOf(b);
+    if (sortBy === "stock-high") return stockOf(b) - stockOf(a);
+    return 0;
+  });
+
+  const isEmpty = PRODUCTS.length === 0;
+  const noMatch = !isEmpty && filtered.length === 0;
 
   return (
     <div className="thiny-screen">
@@ -1188,11 +1226,11 @@ const ScreenProducts = ({ t, lang, onPick, onAdd }) => {
           <p className="thiny-sub">{PRODUCTS.length} SKU · {PRODUCTS.filter((p) => p.status === "active").length} {t.status.active.toLowerCase()}</p>
         </div>
         <div className="thiny-top-actions">
-          <button onClick={() => setShowMultiSell(true)}
-            style={{ padding: "9px 18px", background: "#0A8754", color: "white", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(10,135,84,0.25)" }}>
+          <button onClick={() => setShowMultiSell(true)} disabled={isEmpty}
+            style={{ padding: "9px 18px", background: isEmpty ? "#ccc" : "#0A8754", color: "white", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: isEmpty ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isEmpty ? "none" : "0 2px 8px rgba(10,135,84,0.25)" }}>
             💰 ขายสินค้า
           </button>
-          <button className="thiny-btn-ghost" onClick={() => {
+          <button className="thiny-btn-ghost" disabled={isEmpty} onClick={() => {
             const csv = 'ID,SKU,Name,Price\n' + PRODUCTS.map(p => `${p.id},${p.sku},"${p.name[lang]}",${p.price}`).join('\n');
             const blob = new Blob([csv], {type: 'text/csv'});
             const url = window.URL.createObjectURL(blob);
@@ -1205,60 +1243,102 @@ const ScreenProducts = ({ t, lang, onPick, onAdd }) => {
         </div>
       </div>
 
-      <div className="thiny-cat-tabs">
-        <button className={cat === "all" ? "active" : ""} onClick={() => setCat("all")}>{t.common.all}</button>
-        {CATEGORIES.map((c) =>
-        <button key={c.id} className={cat === c.id ? "active" : ""} onClick={() => setCat(c.id)}>{c.name[lang]}</button>
-        )}
-      </div>
+      {/* ===== EMPTY STATE (no products at all) ===== */}
+      {isEmpty ? (
+        <div style={{ textAlign: "center", padding: "60px 20px", background: "white", borderRadius: 14, marginTop: 20 }}>
+          <div style={{ fontSize: 56, marginBottom: 14 }}>📦</div>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>ยังไม่มีสินค้าในระบบ</div>
+          <div style={{ color: "#888", fontSize: 13, marginBottom: 22 }}>เริ่มต้นด้วยการเพิ่มสินค้าแรกของคุณ</div>
+          <button onClick={onAdd} style={{ padding: "12px 28px", background: "#0F4C81", color: "white", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <Icon name="plus" size={14} /> เพิ่มสินค้าแรก
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* ===== Search + Sort bar ===== */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 220, position: "relative" }}>
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="🔍 ค้นหาด้วยชื่อ, SKU, หรือ barcode..."
+                style={{ width: "100%", padding: "10px 14px", border: "1px solid #ddd", borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
+              {search && (
+                <button onClick={() => setSearch("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#888", padding: 4 }}>×</button>
+              )}
+            </div>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              style={{ padding: "10px 14px", border: "1px solid #ddd", borderRadius: 10, fontSize: 13, background: "white", cursor: "pointer" }}>
+              <option value="name">เรียงตามชื่อ (A→Z)</option>
+              <option value="price-low">ราคา (น้อย→มาก)</option>
+              <option value="price-high">ราคา (มาก→น้อย)</option>
+              <option value="stock-low">สต๊อก (น้อย→มาก)</option>
+              <option value="stock-high">สต๊อก (มาก→น้อย)</option>
+            </select>
+          </div>
 
-      <div className="thiny-card thiny-card-flush">
-        <table className="thiny-table">
-          <thead>
-            <tr>
-              <th>{t.products.title.split(" ")[0]}</th>
-              <th>{t.products.sku}</th>
-              <th>{t.products.barcode}</th>
-              <th>{t.common.price}</th>
-              <th>{t.products.onhand}</th>
-              <th>{t.common.status}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((p) => {
-              const total = Object.values(p.stockByLoc).reduce((a, b) => a + b, 0);
-              const isLow = total < p.reorder * 2;
-              return (
-                <tr key={p.id} className="thiny-tr-click" onClick={() => onPick(p.id)}>
-                  <td className="thiny-td-product">
-                    <ProductImg id={p.image} size="sm" rounded="rounded-md" />
-                    <div>
-                      <div className="thiny-strong">{p.name[lang]}</div>
-                      <div className="thiny-fg-3 thiny-xs">{p.id}</div>
-                    </div>
-                  </td>
-                  <td className="thiny-mono">{p.sku}</td>
-                  <td className="thiny-mono thiny-fg-2">{p.barcode}</td>
-                  <td><strong>{fmtMoney(p.price, lang)}</strong></td>
-                  <td>
-                    <div className="thiny-onhand">
-                      <strong style={{ color: isLow ? "var(--c-warn)" : "inherit" }}>{total}</strong>
-                      <div className="thiny-onhand-bar">
-                        <div style={{ width: `${Math.min(100, total / (p.reorder * 5) * 100)}%`, background: isLow ? "var(--c-warn)" : "var(--c-accent)" }} />
-                      </div>
-                    </div>
-                  </td>
-                  <td><StatusBadge kind={isLow ? "low" : "active"} label={t.status[isLow ? "low" : "active"]} /></td>
-                  <td><button className="thiny-icon-btn" onClick={() => onPick(p.id)} title="View details"><Icon name="chev" size={14} /></button></td>
-                </tr>);
+          <div className="thiny-cat-tabs">
+            <button className={cat === "all" ? "active" : ""} onClick={() => setCat("all")}>{t.common.all}</button>
+            {CATEGORIES.map((c) =>
+              <button key={c.id} className={cat === c.id ? "active" : ""} onClick={() => setCat(c.id)}>{c.name[lang]}</button>
+            )}
+          </div>
 
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>);
-
+          {noMatch ? (
+            <div style={{ textAlign: "center", padding: "40px 20px", background: "white", borderRadius: 14 }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>🔍</div>
+              <div style={{ fontSize: 14, color: "#666" }}>ไม่พบสินค้าที่ตรงกับการค้นหา</div>
+              {search && <button onClick={() => setSearch("")} style={{ marginTop: 12, padding: "6px 14px", border: "1px solid #ddd", borderRadius: 6, background: "white", cursor: "pointer", fontSize: 12 }}>ล้างคำค้นหา</button>}
+            </div>
+          ) : (
+            <div className="thiny-card thiny-card-flush">
+              <table className="thiny-table">
+                <thead>
+                  <tr>
+                    <th>{t.products.title.split(" ")[0]}</th>
+                    <th>{t.products.sku}</th>
+                    <th>{t.products.barcode}</th>
+                    <th>{t.common.price}</th>
+                    <th>{t.products.onhand}</th>
+                    <th>{t.common.status}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((p) => {
+                    const total = stockOf(p);
+                    const isLow = total < (p.reorder || 10) * 2;
+                    return (
+                      <tr key={p.id} className="thiny-tr-click" onClick={() => onPick(p.id)}>
+                        <td className="thiny-td-product">
+                          <ProductImg id={p.image} size="sm" rounded="rounded-md" />
+                          <div>
+                            <div className="thiny-strong">{p.name[lang]}</div>
+                            <div className="thiny-fg-3 thiny-xs">{p.id}</div>
+                          </div>
+                        </td>
+                        <td className="thiny-mono">{p.sku}</td>
+                        <td className="thiny-mono thiny-fg-2">{p.barcode || "—"}</td>
+                        <td><strong>{fmtMoney(p.price, lang)}</strong></td>
+                        <td>
+                          <div className="thiny-onhand">
+                            <strong style={{ color: isLow ? "var(--c-warn)" : "inherit" }}>{total}</strong>
+                            <div className="thiny-onhand-bar">
+                              <div style={{ width: `${Math.min(100, total / ((p.reorder || 10) * 5) * 100)}%`, background: isLow ? "var(--c-warn)" : "var(--c-accent)" }} />
+                            </div>
+                          </div>
+                        </td>
+                        <td><StatusBadge kind={isLow ? "low" : "active"} label={t.status[isLow ? "low" : "active"]} /></td>
+                        <td><button className="thiny-icon-btn" onClick={(e) => { e.stopPropagation(); onPick(p.id); }} title="View details"><Icon name="chev" size={14} /></button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 };
 
 // ---------------- PRODUCT DETAIL ----------------
@@ -1346,6 +1426,8 @@ const SellProductModal = ({ product, onClose, onDone }) => {
       // 4. อัปเดต local state
       product.stockByLoc = product.stockByLoc || {};
       product.stockByLoc[loc.id] = newQty;
+      // บันทึก movement
+      await logMovement({ type: "out", productId: product.id, qty: qtyNum, locationId: loc.id, refId: orderId });
       if (window.logAudit) window.logAudit("sell_product", "product", product.id, `ขาย ${qtyNum} ชิ้น @ ${priceNum} = ${total} ฿ · ลูกค้า ${custName}${custPhone ? " (" + custPhone + ")" : ""}${note ? " · " + note : ""}`);
 
       alert(`✅ บันทึกขายสำเร็จ\n\n${product.name?.th || product.name} × ${qtyNum}\nยอดรวม: ${total.toLocaleString()} ฿\nลูกค้า: ${custName}${profit !== null ? `\nกำไร: ${profit.toLocaleString()} ฿` : ""}`);
@@ -1662,6 +1744,8 @@ const ReceiveStockModal = ({ product, onClose, onDone }) => {
       if (res.ok) {
         product.stockByLoc = product.stockByLoc || {};
         product.stockByLoc[loc.id] = current + n;
+        // บันทึก movement
+        await logMovement({ type: "in", productId: product.id, qty: n, locationId: loc.id, refId: note || "" });
         if (window.logAudit) window.logAudit("stock_receive", "product", product.id, `รับเข้า ${n} ชิ้น · ${note || "—"}`);
         onDone();
       } else {
