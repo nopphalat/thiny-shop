@@ -714,20 +714,281 @@ const MoveTag = ({ type, t }) => {
 };
 
 // ---------------- PRODUCTS ----------------
+// ============= MULTI-PRODUCT SELL MODAL (POS-style) =============
+const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
+  const [cart, setCart] = useState([]); // [{ id, product, qty, price }]
+  const [search, setSearch] = useState("");
+  const [custName, setCustName] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [channel, setChannel] = useState("walkin");
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(false);
+  const loc = (window.THINY_DATA.LOCATIONS || [])[0];
+  const PRODUCTS = window.THINY_DATA.PRODUCTS || [];
+
+  const channels = [
+    { id: "walkin", label: "🏪 หน้าร้าน" },
+    { id: "line", label: "💬 LINE" },
+    { id: "fb", label: "📘 FB" },
+    { id: "ig", label: "📷 IG" },
+    { id: "tiktok", label: "🎵 TikTok" },
+    { id: "other", label: "✏️ อื่นๆ" },
+  ];
+
+  const searchLower = search.trim().toLowerCase();
+  const filteredProducts = !searchLower ? PRODUCTS : PRODUCTS.filter(p => {
+    const stock = Object.values(p.stockByLoc || {}).reduce((a,b) => a+b, 0);
+    if (stock <= 0) return false;
+    const haystack = [p.id, p.sku, p.barcode, p.name?.[lang], p.name?.th, p.name?.en].filter(Boolean).join(" ").toLowerCase();
+    return haystack.includes(searchLower);
+  });
+
+  const addToCart = (product) => {
+    const stock = Object.values(product.stockByLoc || {}).reduce((a,b) => a+b, 0);
+    if (stock <= 0) { alert("สินค้าหมด"); return; }
+    const existing = cart.find(c => c.id === product.id);
+    if (existing) {
+      if (existing.qty + 1 > stock) { alert(`สต๊อกไม่พอ · ${product.name?.[lang] || product.name?.th} เหลือ ${stock} ชิ้น`); return; }
+      setCart(cart.map(c => c.id === product.id ? { ...c, qty: c.qty + 1 } : c));
+    } else {
+      setCart([...cart, { id: product.id, product, qty: 1, price: product.price }]);
+    }
+    setSearch("");
+  };
+
+  const updateQty = (id, delta) => {
+    setCart(cart.map(c => {
+      if (c.id !== id) return c;
+      const newQty = c.qty + delta;
+      const stock = Object.values(c.product.stockByLoc || {}).reduce((a,b) => a+b, 0);
+      if (newQty <= 0) return null;
+      if (newQty > stock) { alert(`สต๊อกไม่พอ · เหลือ ${stock} ชิ้น`); return c; }
+      return { ...c, qty: newQty };
+    }).filter(Boolean));
+  };
+
+  const setItemPrice = (id, newPrice) => {
+    setCart(cart.map(c => c.id === id ? { ...c, price: parseFloat(newPrice) || 0 } : c));
+  };
+
+  const removeItem = (id) => setCart(cart.filter(c => c.id !== id));
+
+  const total = cart.reduce((sum, c) => sum + (c.qty * c.price), 0);
+  const totalQty = cart.reduce((sum, c) => sum + c.qty, 0);
+  const totalCost = cart.reduce((sum, c) => sum + (c.qty * (c.product.cost || 0)), 0);
+  const profit = totalCost > 0 ? total - totalCost : null;
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) { alert("กรุณาเลือกสินค้าก่อน"); return; }
+    if (!custName.trim()) { alert("กรุณากรอกชื่อลูกค้า"); return; }
+    if (!loc) { alert("ยังไม่มี location ในระบบ"); return; }
+
+    setLoading(true);
+    try {
+      // 1. ลูกค้า
+      let customerId;
+      if (custPhone.trim()) {
+        customerId = "C-" + custPhone.replace(/\D/g, "").slice(-9);
+        await fetch(window.API_BASE + "/customers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: customerId, name: custName.trim(), phone: custPhone.trim(),
+            email: "", tier: "regular", joined_date: new Date().toISOString().split("T")[0], points: 0,
+          }),
+        }).catch(() => {});
+      } else {
+        customerId = "WALKIN-" + Date.now();
+      }
+
+      // 2. order
+      const orderId = "S-" + Date.now().toString().slice(-8);
+      const orderRes = await fetch(window.API_BASE + "/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: orderId,
+          customer_id: customerId,
+          total_amount: total,
+          items: cart.map(c => ({ product_id: c.id, quantity: c.qty, price: c.price })),
+        }),
+      });
+      if (!orderRes.ok) {
+        alert("ไม่สามารถบันทึกคำสั่งซื้อ: " + (await orderRes.text()));
+        setLoading(false);
+        return;
+      }
+
+      // 3. หักสต๊อกทุกตัว
+      for (const item of cart) {
+        const current = item.product.stockByLoc?.[loc.id] || 0;
+        const newQty = Math.max(0, current - item.qty);
+        await fetch(window.API_BASE + "/stock/" + encodeURIComponent(item.id) + "/" + encodeURIComponent(loc.id), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quantity: newQty }),
+        }).catch(() => {});
+        item.product.stockByLoc = item.product.stockByLoc || {};
+        item.product.stockByLoc[loc.id] = newQty;
+      }
+
+      if (window.logAudit) {
+        const summary = cart.map(c => `${c.product.name?.th || c.id} × ${c.qty}`).join(", ");
+        window.logAudit("sell_multi", "order", orderId, `${summary} = ${total.toLocaleString()} ฿ · ลูกค้า ${custName}${custPhone ? " (" + custPhone + ")" : ""}`);
+      }
+
+      alert(`✅ บันทึกการขายสำเร็จ\n\nรายการ: ${cart.length} ชนิด · ${totalQty} ชิ้น\nยอดรวม: ${total.toLocaleString()} ฿\nลูกค้า: ${custName}${profit !== null ? `\nกำไร: ${profit.toLocaleString()} ฿` : ""}`);
+      onDone();
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 12 }}>
+      <div style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 720, maxHeight: "95vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.35)" }}>
+        {/* Header */}
+        <div style={{ padding: "18px 22px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#0A8754" }}>💰 บันทึกการขาย</div>
+            <div style={{ fontSize: 12, color: "#888" }}>{cart.length} ชนิด · {totalQty} ชิ้น · {total.toLocaleString()} ฿</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#888", padding: 4 }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
+          {/* Product search */}
+          <div style={{ marginBottom: 14 }}>
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="🔍 ค้นหาสินค้าด้วยชื่อ / SKU / barcode..."
+              style={{ width: "100%", padding: "11px 14px", border: "2px solid #0F4C81", borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
+            {search && (
+              <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid #eee", borderRadius: 10, marginTop: 6, background: "white" }}>
+                {filteredProducts.length === 0 ? (
+                  <div style={{ padding: 16, textAlign: "center", color: "#888", fontSize: 13 }}>ไม่พบสินค้า (หรือสต๊อกหมด)</div>
+                ) : filteredProducts.slice(0, 10).map(p => {
+                  const stock = Object.values(p.stockByLoc || {}).reduce((a,b) => a+b, 0);
+                  return (
+                    <button key={p.id} onClick={() => addToCart(p)}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "10px 14px", border: "none", borderBottom: "1px solid #f5f5f5", background: "white", cursor: "pointer", textAlign: "left" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "#F0F7FF"}
+                      onMouseLeave={e => e.currentTarget.style.background = "white"}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{p.name?.[lang] || p.name?.th}</div>
+                        <div style={{ fontSize: 11, color: "#888" }}>{p.id} · {fmtMoney(p.price, lang)} · คงเหลือ {stock}</div>
+                      </div>
+                      <div style={{ background: "#0A8754", color: "white", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 700 }}>+ เพิ่ม</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Cart */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "#444" }}>🛒 รายการสินค้า ({cart.length})</div>
+            {cart.length === 0 ? (
+              <div style={{ padding: "28px 16px", textAlign: "center", color: "#888", border: "2px dashed #ddd", borderRadius: 10, fontSize: 13 }}>
+                ยังไม่มีสินค้าในรายการ<br />
+                <span style={{ fontSize: 11 }}>พิมพ์ชื่อสินค้าด้านบนเพื่อเพิ่ม</span>
+              </div>
+            ) : (
+              <div style={{ border: "1px solid #eee", borderRadius: 10, overflow: "hidden" }}>
+                {cart.map(c => {
+                  const stock = Object.values(c.product.stockByLoc || {}).reduce((a,b) => a+b, 0);
+                  return (
+                    <div key={c.id} style={{ padding: "10px 12px", borderBottom: "1px solid #f5f5f5", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, background: "white" }}>
+                      <div style={{ flex: 1, minWidth: 140 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{c.product.name?.[lang] || c.product.name?.th}</div>
+                        <div style={{ fontSize: 10, color: "#888" }}>คงเหลือ {stock} · {c.id}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#f5f5f5", borderRadius: 8, padding: 2 }}>
+                        <button onClick={() => updateQty(c.id, -1)} style={{ width: 28, height: 28, border: "none", background: "white", borderRadius: 6, fontWeight: 800, fontSize: 16, cursor: "pointer" }}>−</button>
+                        <span style={{ minWidth: 28, textAlign: "center", fontWeight: 700, fontSize: 14 }}>{c.qty}</span>
+                        <button onClick={() => updateQty(c.id, 1)} style={{ width: 28, height: 28, border: "none", background: "white", borderRadius: 6, fontWeight: 800, fontSize: 16, cursor: "pointer" }}>+</button>
+                      </div>
+                      <input type="number" value={c.price} onChange={e => setItemPrice(c.id, e.target.value)}
+                        style={{ width: 80, padding: "5px 8px", border: "1px solid #ddd", borderRadius: 6, fontSize: 13, textAlign: "right" }} />
+                      <div style={{ minWidth: 70, textAlign: "right", fontWeight: 700, fontSize: 13, color: "#0A8754" }}>
+                        {(c.qty * c.price).toLocaleString()} ฿
+                      </div>
+                      <button onClick={() => removeItem(c.id)} style={{ background: "none", border: "none", color: "#c00", cursor: "pointer", fontSize: 16, padding: 2 }}>×</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Customer info */}
+          <div style={{ background: "#FAFAF7", padding: 14, borderRadius: 10, marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: "#444" }}>👤 ข้อมูลลูกค้า</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <input type="text" value={custName} onChange={e => setCustName(e.target.value)} placeholder="ชื่อลูกค้า *"
+                style={{ padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+              <input type="tel" value={custPhone} onChange={e => setCustPhone(e.target.value)} placeholder="เบอร์โทร (ไม่บังคับ)"
+                style={{ padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 4, marginBottom: 10 }}>
+              {channels.map(c => (
+                <button key={c.id} type="button" onClick={() => setChannel(c.id)}
+                  style={{ padding: "7px 4px", border: channel === c.id ? "2px solid #0F4C81" : "1px solid #ddd", background: channel === c.id ? "#E8EEF6" : "white", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: channel === c.id ? 700 : 500 }}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+            <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="หมายเหตุ (ไม่บังคับ)"
+              style={{ width: "100%", padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "14px 22px", borderTop: "1px solid #eee", background: "#F8FAF8" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 11, color: "#888" }}>ยอดรวม ({totalQty} ชิ้น)</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#0A8754" }}>{total.toLocaleString()} ฿</div>
+              {profit !== null && <div style={{ fontSize: 11, color: "#666" }}>กำไรประมาณ {profit.toLocaleString()} ฿</div>}
+            </div>
+            <button onClick={handleCheckout} disabled={loading || cart.length === 0 || !custName.trim()}
+              style={{
+                padding: "14px 28px", background: (loading || cart.length === 0 || !custName.trim()) ? "#aaa" : "#0A8754",
+                color: "white", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 15,
+                cursor: (loading || cart.length === 0 || !custName.trim()) ? "not-allowed" : "pointer",
+                boxShadow: "0 4px 14px rgba(10,135,84,0.3)"
+              }}>
+              {loading ? "กำลังบันทึก..." : "✓ บันทึกการขาย"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ScreenProducts = ({ t, lang, onPick, onAdd }) => {
   const { PRODUCTS, CATEGORIES } = window.THINY_DATA;
   const [cat, setCat] = useState("all");
+  const [showMultiSell, setShowMultiSell] = useState(false);
 
   const filtered = cat === "all" ? PRODUCTS : PRODUCTS.filter((p) => p.category === cat);
 
   return (
     <div className="thiny-screen">
+      {showMultiSell && <MultiSellModal lang={lang} onClose={() => setShowMultiSell(false)} onDone={() => { setShowMultiSell(false); window.location.reload(); }} />}
       <div className="thiny-screen-head">
         <div>
           <h1 className="thiny-h1">{t.products.title}</h1>
           <p className="thiny-sub">{PRODUCTS.length} SKU · {PRODUCTS.filter((p) => p.status === "active").length} {t.status.active.toLowerCase()}</p>
         </div>
         <div className="thiny-top-actions">
+          <button onClick={() => setShowMultiSell(true)}
+            style={{ padding: "9px 18px", background: "#0A8754", color: "white", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 2px 8px rgba(10,135,84,0.25)" }}>
+            💰 ขายสินค้า
+          </button>
           <button className="thiny-btn-ghost" onClick={() => {
             const csv = 'ID,SKU,Name,Price\n' + PRODUCTS.map(p => `${p.id},${p.sku},"${p.name[lang]}",${p.price}`).join('\n');
             const blob = new Blob([csv], {type: 'text/csv'});
