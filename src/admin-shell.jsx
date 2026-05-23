@@ -714,6 +714,68 @@ const MoveTag = ({ type, t }) => {
 };
 
 // ---------------- PRODUCTS ----------------
+// ============= PRINT RECEIPT helper =============
+function printReceipt({ orderId, date, items, subtotal, discount, discountLabel, total, custName, custPhone, channel, note, lang = "th" }) {
+  const channelLabels = { walkin: "หน้าร้าน", line: "LINE", fb: "Facebook", ig: "Instagram", tiktok: "TikTok", other: "อื่นๆ" };
+  const itemsHtml = items.map(it => {
+    const name = it.product?.name?.[lang] || it.product?.name?.th || it.product?.name || it.id;
+    return `<tr>
+      <td style="padding:4px 0;">${name}<div style="font-size:9px;color:#777">${it.id}</div></td>
+      <td style="text-align:center;padding:4px 0;">${it.qty}</td>
+      <td style="text-align:right;padding:4px 0;">${it.price.toLocaleString()}</td>
+      <td style="text-align:right;padding:4px 0;font-weight:600;">${(it.qty*it.price).toLocaleString()}</td>
+    </tr>`;
+  }).join("");
+
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><title>บิล ${orderId}</title>
+<style>
+  @media print { @page { size: 80mm auto; margin: 4mm; } body { margin: 0; } .no-print { display:none !important; } }
+  body { font-family: "Sarabun","IBM Plex Sans Thai", -apple-system, system-ui, sans-serif; font-size: 12px; max-width: 320px; margin: 0 auto; padding: 14px; color: #000; }
+  h1 { font-size: 18px; text-align: center; margin: 0 0 4px; letter-spacing: 1px; }
+  .sub { text-align: center; font-size: 10px; color: #555; margin-bottom: 10px; }
+  hr { border: none; border-top: 1px dashed #999; margin: 8px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { text-align: left; font-weight: 600; border-bottom: 1px solid #000; padding: 4px 0; }
+  th:nth-child(2) { text-align: center; }
+  th:nth-child(3), th:nth-child(4) { text-align: right; }
+  .row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
+  .total { font-size: 16px; font-weight: 800; padding: 6px 0; border-top: 2px solid #000; border-bottom: 2px solid #000; margin-top: 4px; }
+  .thanks { text-align: center; margin-top: 14px; font-size: 10px; color: #555; }
+  .btn { display: inline-block; padding: 10px 20px; background: #0F4C81; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; margin: 4px; }
+</style></head>
+<body>
+  <h1>THINY SHOP</h1>
+  <div class="sub">ใบเสร็จรับเงิน</div>
+  <div class="row"><span>เลขที่:</span><strong>${orderId}</strong></div>
+  <div class="row"><span>วันที่:</span><span>${date}</span></div>
+  <div class="row"><span>ลูกค้า:</span><strong>${custName}</strong></div>
+  ${custPhone ? `<div class="row"><span>เบอร์:</span><span>${custPhone}</span></div>` : ""}
+  <div class="row"><span>ช่องทาง:</span><span>${channelLabels[channel] || channel}</span></div>
+  <hr>
+  <table>
+    <thead><tr><th>รายการ</th><th>จำนวน</th><th>ราคา</th><th>รวม</th></tr></thead>
+    <tbody>${itemsHtml}</tbody>
+  </table>
+  <hr>
+  <div class="row"><span>รวมก่อนลด</span><span>${subtotal.toLocaleString()} ฿</span></div>
+  ${discount > 0 ? `<div class="row" style="color:#c00"><span>ส่วนลด${discountLabel ? " ("+discountLabel+")" : ""}</span><span>−${discount.toLocaleString()} ฿</span></div>` : ""}
+  <div class="row total"><span>ยอดสุทธิ</span><span>${total.toLocaleString()} ฿</span></div>
+  ${note ? `<div style="margin-top:8px;font-size:10px;color:#666;">หมายเหตุ: ${note}</div>` : ""}
+  <div class="thanks">★ ขอบคุณที่อุดหนุน ★<br>${new Date().toLocaleString("th-TH")}</div>
+  <div class="no-print" style="text-align:center;margin-top:18px;">
+    <button class="btn" onclick="window.print()">🖨 พิมพ์บิล</button>
+    <button class="btn" style="background:#888" onclick="window.close()">ปิด</button>
+  </div>
+  <script>setTimeout(() => window.print(), 300);<\/script>
+</body></html>`;
+
+  const w = window.open("", "_blank", "width=380,height=640");
+  if (!w) { alert("ไม่สามารถเปิดหน้าต่างพิมพ์ได้ · กรุณาอนุญาต popup"); return; }
+  w.document.write(html);
+  w.document.close();
+}
+
 // ============= MULTI-PRODUCT SELL MODAL (POS-style) =============
 const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
   const [cart, setCart] = useState([]); // [{ id, product, qty, price }]
@@ -722,7 +784,10 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
   const [custPhone, setCustPhone] = useState("");
   const [channel, setChannel] = useState("walkin");
   const [note, setNote] = useState("");
+  const [discount, setDiscount] = useState("");
+  const [discountType, setDiscountType] = useState("baht"); // "baht" | "percent"
   const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(null); // saved receipt data after success
   const loc = (window.THINY_DATA.LOCATIONS || [])[0];
   const PRODUCTS = window.THINY_DATA.PRODUCTS || [];
 
@@ -773,9 +838,17 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
 
   const removeItem = (id) => setCart(cart.filter(c => c.id !== id));
 
-  const total = cart.reduce((sum, c) => sum + (c.qty * c.price), 0);
+  const subtotal = cart.reduce((sum, c) => sum + (c.qty * c.price), 0);
   const totalQty = cart.reduce((sum, c) => sum + c.qty, 0);
   const totalCost = cart.reduce((sum, c) => sum + (c.qty * (c.product.cost || 0)), 0);
+  const discountNum = parseFloat(discount) || 0;
+  const discountAmount = discountType === "percent"
+    ? Math.round(subtotal * discountNum / 100 * 100) / 100
+    : discountNum;
+  const total = Math.max(0, subtotal - discountAmount);
+  const discountLabel = discountAmount > 0
+    ? (discountType === "percent" ? `${discountNum}%` : "")
+    : "";
   const profit = totalCost > 0 ? total - totalCost : null;
 
   const handleCheckout = async () => {
@@ -834,16 +907,74 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
 
       if (window.logAudit) {
         const summary = cart.map(c => `${c.product.name?.th || c.id} × ${c.qty}`).join(", ");
-        window.logAudit("sell_multi", "order", orderId, `${summary} = ${total.toLocaleString()} ฿ · ลูกค้า ${custName}${custPhone ? " (" + custPhone + ")" : ""}`);
+        window.logAudit("sell_multi", "order", orderId, `${summary} = ${total.toLocaleString()} ฿${discountAmount > 0 ? ` (ลด ${discountAmount.toLocaleString()})` : ""} · ลูกค้า ${custName}${custPhone ? " (" + custPhone + ")" : ""}`);
       }
 
-      alert(`✅ บันทึกการขายสำเร็จ\n\nรายการ: ${cart.length} ชนิด · ${totalQty} ชิ้น\nยอดรวม: ${total.toLocaleString()} ฿\nลูกค้า: ${custName}${profit !== null ? `\nกำไร: ${profit.toLocaleString()} ฿` : ""}`);
-      onDone();
+      // เก็บข้อมูลไว้สำหรับพิมพ์บิล
+      setDone({
+        orderId,
+        date: new Date().toLocaleString("th-TH"),
+        items: cart.map(c => ({ id: c.id, product: c.product, qty: c.qty, price: c.price })),
+        subtotal, discount: discountAmount, discountLabel, total,
+        custName: custName.trim(), custPhone: custPhone.trim(), channel, note: note.trim(),
+        totalQty, profit,
+      });
     } catch (e) {
       alert("Error: " + e.message);
     }
     setLoading(false);
   };
+
+  // ===== DONE SCREEN — after successful sale =====
+  if (done) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 12 }}>
+        <div style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.35)", overflow: "hidden" }}>
+          <div style={{ padding: "32px 28px 20px", textAlign: "center", background: "linear-gradient(135deg,#0A8754 0%,#0F9C66 100%)", color: "white" }}>
+            <div style={{ fontSize: 48, marginBottom: 6 }}>✓</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>บันทึกการขายสำเร็จ</div>
+            <div style={{ fontSize: 13, opacity: 0.9 }}>#{done.orderId}</div>
+          </div>
+          <div style={{ padding: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #eee" }}>
+              <span style={{ color: "#666", fontSize: 13 }}>ลูกค้า</span>
+              <strong style={{ fontSize: 13 }}>{done.custName}{done.custPhone ? ` (${done.custPhone})` : ""}</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #eee" }}>
+              <span style={{ color: "#666", fontSize: 13 }}>รายการ</span>
+              <strong style={{ fontSize: 13 }}>{done.items.length} ชนิด · {done.totalQty} ชิ้น</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #eee" }}>
+              <span style={{ color: "#666", fontSize: 13 }}>รวมก่อนลด</span>
+              <span style={{ fontSize: 13 }}>{done.subtotal.toLocaleString()} ฿</span>
+            </div>
+            {done.discount > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #eee", color: "#c00" }}>
+                <span style={{ fontSize: 13 }}>ส่วนลด{done.discountLabel ? ` (${done.discountLabel})` : ""}</span>
+                <span style={{ fontSize: 13 }}>−{done.discount.toLocaleString()} ฿</span>
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "2px solid #000", marginTop: 4 }}>
+              <span style={{ fontWeight: 700 }}>ยอดสุทธิ</span>
+              <span style={{ fontSize: 22, fontWeight: 800, color: "#0A8754" }}>{done.total.toLocaleString()} ฿</span>
+            </div>
+            {done.profit !== null && (
+              <div style={{ textAlign: "right", fontSize: 11, color: "#666", marginTop: 4 }}>กำไรประมาณ {done.profit.toLocaleString()} ฿</div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+              <button onClick={() => printReceipt({ ...done, lang })} style={{ flex: 1, padding: "12px 16px", background: "#0F4C81", color: "white", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                🖨 พิมพ์บิล
+              </button>
+              <button onClick={() => { setDone(null); onDone(); }} style={{ flex: 1, padding: "12px 16px", background: "white", color: "#333", border: "1px solid #ddd", borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+                เสร็จสิ้น
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 12 }}>
@@ -943,13 +1074,43 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
             <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="หมายเหตุ (ไม่บังคับ)"
               style={{ width: "100%", padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
           </div>
+
+          {/* Discount */}
+          {cart.length > 0 && (
+            <div style={{ background: "#FFF8E1", padding: 12, borderRadius: 10, marginBottom: 12, border: "1px solid #FFD27A" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "#8B5A00" }}>🏷️ ส่วนลด</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+                <div style={{ display: "flex", border: "1px solid #ddd", borderRadius: 8, overflow: "hidden", background: "white" }}>
+                  <button type="button" onClick={() => setDiscountType("baht")}
+                    style={{ padding: "6px 14px", border: "none", background: discountType === "baht" ? "#0F4C81" : "white", color: discountType === "baht" ? "white" : "#666", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>฿</button>
+                  <button type="button" onClick={() => setDiscountType("percent")}
+                    style={{ padding: "6px 14px", border: "none", background: discountType === "percent" ? "#0F4C81" : "white", color: discountType === "percent" ? "white" : "#666", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>%</button>
+                </div>
+                <input type="number" min="0" value={discount} onChange={e => setDiscount(e.target.value)}
+                  placeholder={discountType === "baht" ? "เช่น 50" : "เช่น 10"}
+                  style={{ flex: 1, padding: "8px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+                {discountAmount > 0 && (
+                  <button type="button" onClick={() => setDiscount("")}
+                    style={{ padding: "8px 14px", border: "1px solid #ddd", background: "white", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#888" }}>×</button>
+                )}
+              </div>
+              {discountAmount > 0 && (
+                <div style={{ fontSize: 11, color: "#8B5A00", marginTop: 6 }}>
+                  ลดทั้งหมด {discountAmount.toLocaleString()} ฿ จาก {subtotal.toLocaleString()} ฿
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div style={{ padding: "14px 22px", borderTop: "1px solid #eee", background: "#F8FAF8" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <div>
-              <div style={{ fontSize: 11, color: "#888" }}>ยอดรวม ({totalQty} ชิ้น)</div>
+              <div style={{ fontSize: 11, color: "#888" }}>ยอดสุทธิ ({totalQty} ชิ้น)</div>
+              {discountAmount > 0 && (
+                <div style={{ fontSize: 11, color: "#888", textDecoration: "line-through" }}>{subtotal.toLocaleString()} ฿</div>
+              )}
               <div style={{ fontSize: 24, fontWeight: 800, color: "#0A8754" }}>{total.toLocaleString()} ฿</div>
               {profit !== null && <div style={{ fontSize: 11, color: "#666" }}>กำไรประมาณ {profit.toLocaleString()} ฿</div>}
             </div>
@@ -960,7 +1121,7 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
                 cursor: (loading || cart.length === 0 || !custName.trim()) ? "not-allowed" : "pointer",
                 boxShadow: "0 4px 14px rgba(10,135,84,0.3)"
               }}>
-              {loading ? "กำลังบันทึก..." : "✓ บันทึกการขาย"}
+              {loading ? "กำลังบันทึก..." : "✓ ชำระเงิน"}
             </button>
           </div>
         </div>
