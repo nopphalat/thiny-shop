@@ -1445,6 +1445,195 @@ const SellProductModal = ({ product, onClose, onDone }) => {
   );
 };
 
+// ============= EDIT PRODUCT MODAL =============
+const EditProductModal = ({ product, onClose, onDone }) => {
+  const CATS = [
+    { id: "fashion",     prefix: "FW", label: "👗 แฟชั่น" },
+    { id: "beauty",      prefix: "BT", label: "💄 ความงาม" },
+    { id: "home",        prefix: "HM", label: "🏠 ของใช้ในบ้าน" },
+    { id: "food",        prefix: "FD", label: "🍱 อาหาร" },
+    { id: "electronics", prefix: "EL", label: "📱 อิเล็กทรอนิกส์" },
+  ];
+  // หา category เดิมจาก SKU prefix
+  const currentCat = (() => {
+    const skuParts = (product.sku || "").split("-");
+    const prefix = skuParts[1] || "";
+    return CATS.find(c => c.prefix === prefix)?.id || "fashion";
+  })();
+
+  const [form, setForm] = useState({
+    name_th: product.name?.th || "",
+    name_en: product.name?.en || "",
+    price: String(product.price || ""),
+    cost: String(product.cost || ""),
+    barcode: product.barcode || "",
+    sku: product.sku || "",
+    category: currentCat,
+    reorder_point: String(product.reorder || 10),
+  });
+  const [loading, setLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const cat = CATS.find(c => c.id === form.category) || CATS[0];
+
+  // ถ้าเปลี่ยน category → ปรับ SKU prefix อัตโนมัติ
+  const handleCategoryChange = (newCatId) => {
+    const newCat = CATS.find(c => c.id === newCatId);
+    if (!newCat) return;
+    // ดูว่า SKU ปัจจุบันมี prefix รูปแบบ TS-XX-... หรือไม่ ถ้ามีก็เปลี่ยน
+    const m = form.sku.match(/^(TS)-([A-Z]{2})-(.+)$/);
+    if (m) {
+      setForm({ ...form, category: newCatId, sku: `TS-${newCat.prefix}-${m[3]}` });
+    } else {
+      setForm({ ...form, category: newCatId });
+    }
+  };
+
+  const inp = (field, placeholder, type = "text") => (
+    <input type={type} value={form[field]} onChange={e => setForm({...form, [field]: e.target.value})}
+      style={{ width: "100%", padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+      placeholder={placeholder} />
+  );
+
+  const handleSave = async () => {
+    if (!form.name_th || !form.price) { alert("กรุณากรอก: ชื่อสินค้า, ราคา"); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(window.API_BASE + "/products/" + encodeURIComponent(product.id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name_th: form.name_th,
+          name_en: form.name_en || form.name_th,
+          name_lo: product.name?.lo || "",
+          price: parseFloat(form.price),
+          cost: parseFloat(form.cost) || 0,
+          barcode: form.barcode,
+          sku: form.sku,
+          reorder_point: parseInt(form.reorder_point) || 10,
+        }),
+      });
+      if (!res.ok) { alert("เกิดข้อผิดพลาด: " + (await res.text())); setLoading(false); return; }
+      if (window.logAudit) window.logAudit("edit_product", "product", product.id, form.name_th);
+      alert("✅ บันทึกข้อมูลสินค้าสำเร็จ");
+      onDone();
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(window.API_BASE + "/products/" + encodeURIComponent(product.id), { method: "DELETE" });
+      if (!res.ok) { alert("ลบไม่สำเร็จ: " + (await res.text())); setLoading(false); return; }
+      if (window.logAudit) window.logAudit("delete_product", "product", product.id, product.name?.th || product.id);
+      alert("🗑 ลบสินค้าเรียบร้อย");
+      onDone(true); // signal that we deleted, parent should go back
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  if (confirmDelete) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 16 }}>
+        <div style={{ background: "white", borderRadius: 14, padding: 28, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+          <div style={{ fontSize: 40, textAlign: "center", marginBottom: 10 }}>⚠️</div>
+          <h3 style={{ margin: "0 0 8px", textAlign: "center", fontSize: 18, fontWeight: 700 }}>ยืนยันการลบสินค้า?</h3>
+          <div style={{ fontSize: 13, color: "#666", textAlign: "center", marginBottom: 18 }}>
+            <strong>{product.name?.th}</strong> ({product.id})<br />
+            สต๊อกทั้งหมดจะถูกลบไปด้วย <br/>
+            <span style={{ color: "#c00" }}>ไม่สามารถกู้คืนได้</span>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setConfirmDelete(false)} style={{ flex: 1, padding: "10px 16px", border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontSize: 14 }}>ยกเลิก</button>
+            <button onClick={handleDelete} disabled={loading} style={{ flex: 1, padding: "10px 16px", background: "#c00", color: "white", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer" }}>
+              {loading ? "กำลังลบ..." : "🗑 ลบเลย"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
+      <div style={{ background: "white", borderRadius: 14, padding: 28, width: "100%", maxWidth: 500, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>⚙️ แก้ไขสินค้า</h2>
+          <span style={{ fontSize: 11, color: "#888", padding: "3px 8px", background: "#f0f0f0", borderRadius: 4 }}>{product.id}</span>
+        </div>
+
+        {/* Category */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", marginBottom: 6, fontSize: 13, fontWeight: 600 }}>หมวดหมู่</label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+            {CATS.map(c => (
+              <button key={c.id} type="button" onClick={() => handleCategoryChange(c.id)}
+                style={{ padding: "9px 12px", border: form.category === c.id ? "2px solid #0F4C81" : "1px solid #ddd", background: form.category === c.id ? "#E8EEF6" : "white", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: form.category === c.id ? 700 : 500, textAlign: "left" }}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>SKU</label>
+          {inp("sku", "TS-FW-001")}
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>ชื่อสินค้า (ไทย) *</label>
+          {inp("name_th", "ชื่อสินค้า")}
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>ชื่อสินค้า (English)</label>
+          {inp("name_en", "Product name")}
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>Barcode</label>
+          {inp("barcode", "8851234567000")}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>ราคาขาย *</label>
+            {inp("price", "0", "number")}
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>ต้นทุน</label>
+            {inp("cost", "0", "number")}
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>แจ้งเมื่อต่ำ</label>
+            {inp("reorder_point", "10", "number")}
+          </div>
+        </div>
+
+        {form.price && form.cost && parseFloat(form.price) > 0 && (
+          <div style={{ padding: "8px 12px", background: "#F0FDF4", borderRadius: 8, fontSize: 12, color: "#0A8754", marginBottom: 14 }}>
+            Margin: {Math.round((1 - parseFloat(form.cost || 0) / parseFloat(form.price)) * 100)}%
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 18, paddingTop: 14, borderTop: "1px solid #eee" }}>
+          <button onClick={() => setConfirmDelete(true)} style={{ padding: "9px 14px", border: "1px solid #fcc", borderRadius: 8, background: "white", color: "#c00", cursor: "pointer", fontSize: 13 }}>
+            🗑 ลบสินค้า
+          </button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={onClose} style={{ padding: "9px 18px", border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontSize: 14 }}>ยกเลิก</button>
+            <button onClick={handleSave} disabled={loading} style={{ padding: "9px 22px", background: "#0F4C81", color: "white", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
+              {loading ? "กำลังบันทึก..." : "บันทึก"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ReceiveStockModal = ({ product, onClose, onDone }) => {
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
@@ -1511,6 +1700,7 @@ const ScreenProductDetail = ({ t, lang, pid, onBack }) => {
   const { MOVEMENTS } = window.THINY_DATA;
   const [showReceive, setShowReceive] = useState(false);
   const [showSell, setShowSell] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [, forceUpdate] = useState(0);
 
   if (!p) return <div className="thiny-screen"><button className="thiny-back" onClick={onBack}>← กลับ</button><div style={{padding:40,textAlign:"center",color:"#888"}}>ไม่พบสินค้า</div></div>;
@@ -1527,6 +1717,7 @@ const ScreenProductDetail = ({ t, lang, pid, onBack }) => {
 
       {showReceive && <ReceiveStockModal product={p} onClose={() => setShowReceive(false)} onDone={() => { setShowReceive(false); forceUpdate(n => n + 1); }} />}
       {showSell && <SellProductModal product={p} onClose={() => setShowSell(false)} onDone={() => { setShowSell(false); forceUpdate(n => n + 1); }} />}
+      {showEdit && <EditProductModal product={p} onClose={() => setShowEdit(false)} onDone={(deleted) => { setShowEdit(false); if (deleted) { onBack(); window.location.reload(); } else { window.location.reload(); } }} />}
 
       {/* ── Header card ── */}
       <div className="thiny-card" style={{ marginBottom: 14 }}>
@@ -1577,7 +1768,7 @@ const ScreenProductDetail = ({ t, lang, pid, onBack }) => {
               <button className="thiny-btn thiny-btn-primary" onClick={() => setShowReceive(true)}>
                 <Icon name="plus" size={14} /> รับสินค้าเข้า
               </button>
-              <button className="thiny-btn-ghost" onClick={() => alert('แก้ไขสินค้า: ' + (p.name?.[lang] || p.name?.th))}>
+              <button className="thiny-btn-ghost" onClick={() => setShowEdit(true)}>
                 <Icon name="settings" size={14} /> แก้ไข
               </button>
             </div>
