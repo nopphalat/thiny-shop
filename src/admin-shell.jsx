@@ -798,6 +798,189 @@ const ScreenProducts = ({ t, lang, onPick, onAdd }) => {
 };
 
 // ---------------- PRODUCT DETAIL ----------------
+const SellProductModal = ({ product, onClose, onDone }) => {
+  const [qty, setQty] = useState("1");
+  const [price, setPrice] = useState(String(product.price || ""));
+  const [custName, setCustName] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [channel, setChannel] = useState("walkin");
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(false);
+  const loc = (window.THINY_DATA.LOCATIONS || [])[0];
+  const currentStock = product.stockByLoc?.[loc?.id] || 0;
+  const qtyNum = parseInt(qty) || 0;
+  const priceNum = parseFloat(price) || 0;
+  const total = qtyNum * priceNum;
+  const profit = priceNum > 0 && product.cost > 0 ? (priceNum - product.cost) * qtyNum : null;
+
+  const channels = [
+    { id: "walkin", label: "🏪 หน้าร้าน" },
+    { id: "line", label: "💬 LINE" },
+    { id: "fb", label: "📘 Facebook" },
+    { id: "ig", label: "📷 Instagram" },
+    { id: "tiktok", label: "🎵 TikTok" },
+    { id: "other", label: "✏️ อื่นๆ" },
+  ];
+
+  const handleSell = async () => {
+    if (!qtyNum || qtyNum <= 0) { alert("กรุณากรอกจำนวนที่ขาย"); return; }
+    if (qtyNum > currentStock) { alert(`สต๊อกไม่พอ · คงเหลือ ${currentStock} ชิ้น`); return; }
+    if (!priceNum) { alert("กรุณากรอกราคาขาย"); return; }
+    if (!custName.trim()) { alert("กรุณากรอกชื่อลูกค้า"); return; }
+
+    setLoading(true);
+    try {
+      // 1. หา/สร้างลูกค้า — ใช้เบอร์เป็นกุญแจ
+      let customerId = null;
+      if (custPhone.trim()) {
+        customerId = "C-" + custPhone.replace(/\D/g, "").slice(-9);
+        // ลองสร้าง (ถ้ามีอยู่แล้วก็จะ error ปล่อยผ่าน)
+        await fetch(window.API_BASE + "/customers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: customerId,
+            name: custName.trim(),
+            phone: custPhone.trim(),
+            email: "",
+            tier: "regular",
+            joined_date: new Date().toISOString().split("T")[0],
+            points: 0,
+          }),
+        }).catch(() => {});
+      } else {
+        customerId = "WALKIN-" + Date.now();
+      }
+
+      // 2. สร้าง order
+      const orderId = "S-" + Date.now().toString().slice(-8);
+      const orderRes = await fetch(window.API_BASE + "/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: orderId,
+          customer_id: customerId,
+          total_amount: total,
+          items: [{ product_id: product.id, quantity: qtyNum, price: priceNum }],
+        }),
+      });
+      if (!orderRes.ok) {
+        const txt = await orderRes.text();
+        alert("ไม่สามารถบันทึกคำสั่งซื้อ: " + txt);
+        setLoading(false);
+        return;
+      }
+
+      // 3. หักสต๊อก
+      const newQty = currentStock - qtyNum;
+      await fetch(window.API_BASE + "/stock/" + encodeURIComponent(product.id) + "/" + encodeURIComponent(loc.id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: newQty }),
+      });
+
+      // 4. อัปเดต local state
+      product.stockByLoc = product.stockByLoc || {};
+      product.stockByLoc[loc.id] = newQty;
+      if (window.logAudit) window.logAudit("sell_product", "product", product.id, `ขาย ${qtyNum} ชิ้น @ ${priceNum} = ${total} ฿ · ลูกค้า ${custName}${custPhone ? " (" + custPhone + ")" : ""}${note ? " · " + note : ""}`);
+
+      alert(`✅ บันทึกขายสำเร็จ\n\n${product.name?.th || product.name} × ${qtyNum}\nยอดรวม: ${total.toLocaleString()} ฿\nลูกค้า: ${custName}${profit !== null ? `\nกำไร: ${profit.toLocaleString()} ฿` : ""}`);
+      onDone();
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
+      <div style={{ background: "white", borderRadius: 14, padding: 24, width: "100%", maxWidth: 460, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+        <h3 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 700, color: "#0A8754" }}>💰 ขายสินค้า</h3>
+        <div style={{ fontSize: 13, color: "#888", marginBottom: 18 }}>
+          {product.name?.th || product.name} · คงเหลือ {currentStock} ชิ้น
+        </div>
+
+        {/* Quantity + Price */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>จำนวน *</label>
+            <input type="number" min="1" max={currentStock} value={qty} onChange={e => setQty(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 16, boxSizing: "border-box" }}
+              autoFocus />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>ราคา/ชิ้น *</label>
+            <input type="number" value={price} onChange={e => setPrice(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 16, boxSizing: "border-box" }} />
+          </div>
+        </div>
+
+        {/* Total preview */}
+        {qtyNum > 0 && priceNum > 0 && (
+          <div style={{ padding: "10px 14px", background: "#F0FDF4", borderRadius: 10, marginBottom: 16, border: "1px solid #C6EFD5" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13, color: "#0A8754", fontWeight: 600 }}>ยอดรวม</span>
+              <span style={{ fontSize: 22, fontWeight: 800, color: "#0A8754" }}>{total.toLocaleString()} ฿</span>
+            </div>
+            {profit !== null && (
+              <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>กำไรประมาณ {profit.toLocaleString()} ฿</div>
+            )}
+          </div>
+        )}
+
+        {/* Customer info */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>ชื่อลูกค้า *</label>
+          <input type="text" value={custName} onChange={e => setCustName(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            placeholder="เช่น คุณสมหญิง" />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>เบอร์โทร <span style={{ color: "#888", fontWeight: 400 }}>(ไม่บังคับ)</span></label>
+          <input type="tel" value={custPhone} onChange={e => setCustPhone(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            placeholder="08X-XXX-XXXX" />
+          {custPhone && <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>📇 จะบันทึกเป็นลูกค้าประจำ · ค้นหาได้ภายหลัง</div>}
+        </div>
+
+        {/* Channel */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>ช่องทาง</label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+            {channels.map(c => (
+              <button key={c.id} type="button" onClick={() => setChannel(c.id)}
+                style={{ padding: "8px 6px", border: channel === c.id ? "2px solid #0F4C81" : "1px solid #ddd", background: channel === c.id ? "#E8EEF6" : "white", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: channel === c.id ? 700 : 500 }}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Note */}
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5 }}>หมายเหตุ <span style={{ color: "#888", fontWeight: 400 }}>(ไม่บังคับ)</span></label>
+          <input type="text" value={note} onChange={e => setNote(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            placeholder="เช่น ลดราคาพิเศษ" />
+        </div>
+
+        {qtyNum > currentStock && (
+          <div style={{ padding: "8px 12px", background: "#FEE2E2", color: "#991B1B", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
+            ⚠️ สต๊อกไม่พอ · เหลือ {currentStock} ชิ้น
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "10px 18px", border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontSize: 14 }}>ยกเลิก</button>
+          <button onClick={handleSell} disabled={loading || qtyNum > currentStock} style={{ padding: "10px 24px", background: "#0A8754", color: "white", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: (loading || qtyNum > currentStock) ? "not-allowed" : "pointer", opacity: (loading || qtyNum > currentStock) ? 0.6 : 1 }}>
+            {loading ? "กำลังบันทึก..." : "💰 บันทึกการขาย"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ReceiveStockModal = ({ product, onClose, onDone }) => {
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
@@ -863,6 +1046,7 @@ const ScreenProductDetail = ({ t, lang, pid, onBack }) => {
   const p = window.THINY_DATA.PRODUCTS.find((x) => x.id === pid);
   const { MOVEMENTS } = window.THINY_DATA;
   const [showReceive, setShowReceive] = useState(false);
+  const [showSell, setShowSell] = useState(false);
   const [, forceUpdate] = useState(0);
 
   if (!p) return <div className="thiny-screen"><button className="thiny-back" onClick={onBack}>← กลับ</button><div style={{padding:40,textAlign:"center",color:"#888"}}>ไม่พบสินค้า</div></div>;
@@ -871,12 +1055,14 @@ const ScreenProductDetail = ({ t, lang, pid, onBack }) => {
   const moves = MOVEMENTS.filter((m) => m.product === pid).slice(0, 8);
   const margin = p.cost > 0 ? Math.round((1 - p.cost / p.price) * 100) : null;
   const isLowStock = total <= (p.reorder || 10);
+  const outOfStock = total === 0;
 
   return (
     <div className="thiny-screen">
       <button className="thiny-back" onClick={onBack}><Icon name="chev" size={14} className="thiny-rot180" />{t.common.back}</button>
 
       {showReceive && <ReceiveStockModal product={p} onClose={() => setShowReceive(false)} onDone={() => { setShowReceive(false); forceUpdate(n => n + 1); }} />}
+      {showSell && <SellProductModal product={p} onClose={() => setShowSell(false)} onDone={() => { setShowSell(false); forceUpdate(n => n + 1); }} />}
 
       {/* ── Header card ── */}
       <div className="thiny-card" style={{ marginBottom: 14 }}>
@@ -913,8 +1099,19 @@ const ScreenProductDetail = ({ t, lang, pid, onBack }) => {
 
             {/* Action buttons */}
             <div className="thiny-pd-actions" style={{ marginTop: 16, flexWrap: "wrap", gap: 8 }}>
+              <button
+                onClick={() => setShowSell(true)}
+                disabled={outOfStock}
+                style={{
+                  padding: "10px 20px", background: outOfStock ? "#ccc" : "#0A8754", color: "white",
+                  border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14,
+                  cursor: outOfStock ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", gap: 6
+                }}>
+                💰 ขายสินค้า {outOfStock && "(หมด)"}
+              </button>
               <button className="thiny-btn thiny-btn-primary" onClick={() => setShowReceive(true)}>
-                <Icon name="plus" size={14} /> + รับสินค้าเข้า
+                <Icon name="plus" size={14} /> รับสินค้าเข้า
               </button>
               <button className="thiny-btn-ghost" onClick={() => alert('แก้ไขสินค้า: ' + (p.name?.[lang] || p.name?.th))}>
                 <Icon name="settings" size={14} /> แก้ไข
