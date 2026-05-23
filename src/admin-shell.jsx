@@ -4,6 +4,46 @@
 const { useState, useMemo } = React;
 
 // AddProductModal component
+// สร้าง EAN-13 barcode (Thailand prefix 885) — เลขสุ่ม 12 หลัก + check digit
+function generateBarcode() {
+  let base = "885";
+  for (let i = 0; i < 9; i++) base += Math.floor(Math.random() * 10);
+  // คำนวณ check digit
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(base[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return base + check;
+}
+
+// บีบอัดรูปก่อนอัปโหลด — resize ไม่เกิน 500x500, JPEG quality 0.75
+async function compressImage(file, maxDim = 500, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
+          else { width = Math.round(width * maxDim / height); height = maxDim; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "white"; ctx.fillRect(0, 0, width, height); // bg ขาว เผื่อ PNG โปร่ง
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 const AddProductModal = ({ t, onClose }) => {
   // Category options — must match SKU_CAT mapping in data.js
   const CATEGORY_OPTIONS = [
@@ -13,9 +53,25 @@ const AddProductModal = ({ t, onClose }) => {
     { id: "food",        prefix: "FD", label: "🍱 อาหาร" },
     { id: "electronics", prefix: "EL", label: "📱 อิเล็กทรอนิกส์" },
   ];
-  const [form, setForm] = useState({ id: "", sku: "", name_th: "", name_en: "", price: "", cost: "", barcode: "", quantity: "", category: "fashion" });
+  const [form, setForm] = useState({ id: "", sku: "", name_th: "", name_en: "", price: "", cost: "", barcode: "", quantity: "", category: "fashion", image: "" });
+  const [autoBarcode, setAutoBarcode] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const cat = CATEGORY_OPTIONS.find(c => c.id === form.category) || CATEGORY_OPTIONS[0];
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { alert("ไฟล์ใหญ่เกิน 10MB"); return; }
+    setUploadingImage(true);
+    try {
+      const dataUrl = await compressImage(file);
+      setForm({ ...form, image: dataUrl });
+    } catch (err) {
+      alert("ไม่สามารถอ่านไฟล์ภาพ: " + err.message);
+    }
+    setUploadingImage(false);
+  };
 
   const inp = (field, placeholder, type = "text", label) => (
     <div style={{ marginBottom: 14 }}>
@@ -41,6 +97,7 @@ const AddProductModal = ({ t, onClose }) => {
     setLoading(true);
     try {
       const finalSku = buildSku();
+      const finalBarcode = autoBarcode ? generateBarcode() : (form.barcode || "");
       // 1. สร้างสินค้า
       const res = await fetch(window.API_BASE + "/products", {
         method: "POST",
@@ -53,8 +110,8 @@ const AddProductModal = ({ t, onClose }) => {
           name_lo: "",
           price: parseFloat(form.price),
           cost: parseFloat(form.cost) || 0,
-          barcode: form.barcode || "",
-          image: form.id.toLowerCase(),
+          barcode: finalBarcode,
+          image: form.image || form.id.toLowerCase(),
           reorder_point: 10,
         }),
       });
@@ -89,6 +146,30 @@ const AddProductModal = ({ t, onClose }) => {
       <div style={{ background: "white", borderRadius: 14, padding: 28, width: "90%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
         <h2 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 700 }}>+ เพิ่มสินค้าใหม่</h2>
 
+        {/* Image upload */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 600 }}>รูปสินค้า</label>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <div style={{ width: 96, height: 96, borderRadius: 10, border: "2px dashed #ddd", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: form.image && form.image.startsWith("data:") ? "white" : "#f7f7f5" }}>
+              {form.image && form.image.startsWith("data:") ? (
+                <img src={form.image} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <span style={{ fontSize: 28, color: "#bbb" }}>📷</span>
+              )}
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "inline-block", padding: "8px 14px", border: "1px solid #0F4C81", color: "#0F4C81", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, background: "white" }}>
+                {uploadingImage ? "กำลังบีบอัด..." : (form.image && form.image.startsWith("data:") ? "เปลี่ยนรูป" : "📷 เลือกรูป")}
+                <input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploadingImage} style={{ display: "none" }} />
+              </label>
+              {form.image && form.image.startsWith("data:") && (
+                <button type="button" onClick={() => setForm({ ...form, image: "" })} style={{ marginLeft: 6, padding: "8px 12px", border: "1px solid #fcc", color: "#c00", background: "white", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>ลบ</button>
+              )}
+              <div style={{ fontSize: 11, color: "#888", marginTop: 6 }}>JPG/PNG · ระบบจะย่อขนาดให้อัตโนมัติ</div>
+            </div>
+          </div>
+        </div>
+
         {/* Category picker */}
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 600 }}>หมวดหมู่ *</label>
@@ -119,7 +200,26 @@ const AddProductModal = ({ t, onClose }) => {
         )}
         {inp("name_th", "ชื่อสินค้าภาษาไทย", "text", "ชื่อสินค้า (ไทย) *")}
         {inp("name_en", "Product name", "text", "ชื่อสินค้า (English)")}
-        {inp("barcode", "8851234567000", "text", "Barcode")}
+
+        {/* Barcode with auto-toggle */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+            <label style={{ fontSize: 13, fontWeight: 600 }}>Barcode</label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#666", cursor: "pointer" }}>
+              <input type="checkbox" checked={autoBarcode} onChange={e => setAutoBarcode(e.target.checked)} style={{ cursor: "pointer" }} />
+              สร้างให้อัตโนมัติ
+            </label>
+          </div>
+          {autoBarcode ? (
+            <div style={{ padding: "10px 12px", background: "#F0F7FF", borderRadius: 8, fontSize: 13, color: "#0F4C81", border: "1px solid #cfddf0" }}>
+              🏷️ ระบบจะสร้างบาร์โค้ดให้ — รูปแบบ EAN-13 (ขึ้นต้นด้วย 885 = ประเทศไทย)
+            </div>
+          ) : (
+            <input type="text" value={form.barcode} onChange={e => setForm({...form, barcode: e.target.value})}
+              style={{ width: "100%", padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+              placeholder="8851234567000" />
+          )}
+        </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
           <div>{inp("price", "0", "number", "ราคาขาย *")}</div>
@@ -470,6 +570,9 @@ const ScreenDashboard = ({ t, lang, goto }) => {
         </div>
       </div>
 
+      {/* ============ DIRECT SALES (POS) ============ */}
+      <DirectSalesSummary />
+
       {/* ============ KPI ROW ============ */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
         <div style={{ background: "linear-gradient(135deg, #0F4C81 0%, #1565A8 100%)", color: "white", padding: 18, borderRadius: 12 }}>
@@ -748,6 +851,113 @@ const MoveTag = ({ type, t }) => {
 };
 
 // ---------------- PRODUCTS ----------------
+// ============= DIRECT SALES (POS) SUMMARY =============
+const DirectSalesSummary = () => {
+  const [range, setRange] = useState("today"); // today | week | month
+  const ORDERS = (window.THINY_DATA?.ORDERS || []);
+
+  // Parse SQL datetime '2026-05-23 05:30:00' หรือ ISO '2026-05-23T05:30:00Z'
+  const parseDate = (s) => {
+    if (!s) return null;
+    const normalized = String(s).replace(" ", "T") + (String(s).includes("Z") || String(s).includes("+") ? "" : "Z");
+    const d = new Date(normalized);
+    return isNaN(d) ? null : d;
+  };
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfWeek = new Date(startOfToday); startOfWeek.setDate(startOfToday.getDate() - 6); // 7 วันย้อนหลัง
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const inRange = (d, start) => d && d >= start;
+  const filtered = ORDERS.filter(o => {
+    const d = parseDate(o.date);
+    if (!d) return false;
+    if (range === "today") return inRange(d, startOfToday);
+    if (range === "week") return inRange(d, startOfWeek);
+    if (range === "month") return inRange(d, startOfMonth);
+    return true;
+  });
+
+  const totalRev = filtered.reduce((sum, o) => sum + o.total, 0);
+  const orderCount = filtered.length;
+  const avgOrder = orderCount > 0 ? Math.round(totalRev / orderCount) : 0;
+
+  // สร้าง bar chart รายวัน
+  const dailyAgg = {};
+  filtered.forEach(o => {
+    const d = parseDate(o.date);
+    if (!d) return;
+    const key = `${d.getMonth()+1}/${d.getDate()}`;
+    dailyAgg[key] = (dailyAgg[key] || 0) + o.total;
+  });
+  const days = range === "today" ? 1 : range === "week" ? 7 : new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const dailyList = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = `${d.getMonth()+1}/${d.getDate()}`;
+    dailyList.push({ key, value: dailyAgg[key] || 0, isToday: i === 0 });
+  }
+  const maxVal = Math.max(1, ...dailyList.map(d => d.value));
+
+  const rangeLabel = { today: "วันนี้", week: "7 วัน", month: "เดือนนี้" };
+
+  return (
+    <div className="thiny-card" style={{ padding: 18, marginBottom: 16, background: "linear-gradient(135deg, #0A8754 0%, #0F9C66 100%)", color: "white" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>💰 ยอดขายร้านค้า (POS)</div>
+          <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>ยอดขายตรงผ่านปุ่ม "ขายสินค้า"</div>
+        </div>
+        <div style={{ display: "flex", gap: 6, background: "rgba(0,0,0,0.2)", padding: 4, borderRadius: 8 }}>
+          {["today", "week", "month"].map(r => (
+            <button key={r} onClick={() => setRange(r)}
+              style={{ padding: "6px 14px", border: "none", borderRadius: 6, background: range === r ? "white" : "transparent", color: range === r ? "#0A8754" : "white", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+              {rangeLabel[r]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 11, opacity: 0.85, fontWeight: 600 }}>ยอดขายรวม</div>
+          <div style={{ fontSize: 28, fontWeight: 800, marginTop: 2 }}>{totalRev.toLocaleString()} ฿</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, opacity: 0.85, fontWeight: 600 }}>จำนวนออเดอร์</div>
+          <div style={{ fontSize: 28, fontWeight: 800, marginTop: 2 }}>{orderCount}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, opacity: 0.85, fontWeight: 600 }}>เฉลี่ย/ออเดอร์</div>
+          <div style={{ fontSize: 28, fontWeight: 800, marginTop: 2 }}>{avgOrder.toLocaleString()} ฿</div>
+        </div>
+      </div>
+
+      {/* Mini bar chart */}
+      {range !== "today" && dailyList.length > 0 && (
+        <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 56, paddingTop: 8 }}>
+          {dailyList.map((d, i) => (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }} title={`${d.key}: ${d.value.toLocaleString()} ฿`}>
+              <div style={{ width: "100%", height: `${(d.value / maxVal) * 44}px`, minHeight: d.value > 0 ? 3 : 1, background: d.isToday ? "white" : "rgba(255,255,255,0.5)", borderRadius: 3, transition: "height 0.3s" }}></div>
+              {(days <= 7 || i % 5 === 0) && (
+                <div style={{ fontSize: 9, opacity: 0.7, marginTop: 4 }}>{d.key}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {orderCount === 0 && (
+        <div style={{ padding: "10px 12px", background: "rgba(0,0,0,0.15)", borderRadius: 8, fontSize: 12, marginTop: 6 }}>
+          ยังไม่มีการขายในช่วงนี้ — เริ่มขายผ่านปุ่ม <strong>💰 ขายสินค้า</strong> ในหน้าสินค้า
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ============= MOVEMENT helper =============
 // บันทึก movement (in/out/transfer) เพื่อให้ประวัติการเคลื่อนไหวมีข้อมูล
 async function logMovement({ type, productId, qty, locationId, refId, userName }) {
@@ -1552,9 +1762,27 @@ const EditProductModal = ({ product, onClose, onDone }) => {
     sku: product.sku || "",
     category: currentCat,
     reorder_point: String(product.reorder || 10),
+    image: product.image || "",
   });
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { alert("ไฟล์ใหญ่เกิน 10MB"); return; }
+    setUploadingImage(true);
+    try {
+      const dataUrl = await compressImage(file);
+      setForm({ ...form, image: dataUrl });
+    } catch (err) {
+      alert("ไม่สามารถอ่านไฟล์ภาพ: " + err.message);
+    }
+    setUploadingImage(false);
+  };
+
+  const hasRealImage = form.image && (form.image.startsWith("data:") || form.image.startsWith("http"));
 
   const cat = CATS.find(c => c.id === form.category) || CATS[0];
 
@@ -1594,6 +1822,7 @@ const EditProductModal = ({ product, onClose, onDone }) => {
           cost: parseFloat(form.cost) || 0,
           barcode: form.barcode,
           sku: form.sku,
+          image: form.image || product.id.toLowerCase(),
           reorder_point: parseInt(form.reorder_point) || 10,
         }),
       });
@@ -1649,6 +1878,30 @@ const EditProductModal = ({ product, onClose, onDone }) => {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>⚙️ แก้ไขสินค้า</h2>
           <span style={{ fontSize: 11, color: "#888", padding: "3px 8px", background: "#f0f0f0", borderRadius: 4 }}>{product.id}</span>
+        </div>
+
+        {/* Image upload */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 600 }}>รูปสินค้า</label>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <div style={{ width: 96, height: 96, borderRadius: 10, border: "2px dashed #ddd", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: hasRealImage ? "white" : "#f7f7f5" }}>
+              {hasRealImage ? (
+                <img src={form.image} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <span style={{ fontSize: 28, color: "#bbb" }}>📷</span>
+              )}
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "inline-block", padding: "8px 14px", border: "1px solid #0F4C81", color: "#0F4C81", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, background: "white" }}>
+                {uploadingImage ? "กำลังบีบอัด..." : (hasRealImage ? "เปลี่ยนรูป" : "📷 เลือกรูป")}
+                <input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploadingImage} style={{ display: "none" }} />
+              </label>
+              {hasRealImage && (
+                <button type="button" onClick={() => setForm({ ...form, image: "" })} style={{ marginLeft: 6, padding: "8px 12px", border: "1px solid #fcc", color: "#c00", background: "white", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>ลบรูป</button>
+              )}
+              <div style={{ fontSize: 11, color: "#888", marginTop: 6 }}>JPG/PNG · ระบบจะย่อขนาดให้อัตโนมัติ</div>
+            </div>
+          </div>
         </div>
 
         {/* Category */}

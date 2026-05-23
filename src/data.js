@@ -292,11 +292,19 @@ async function loadDataFromAPI() {
     const CUSTOMERS = transformCustomers(apiCustomers);
     const liveChatOrders = transformChatOrders(apiChatOrders);
     const finalChatOrders = liveChatOrders; // always use API data (empty = no orders)
+    // direct sales (POS) from orders table
+    const ORDERS = (apiOrders || []).map(o => ({
+      id: o.id,
+      customerId: o.customer_id,
+      total: Number(o.total_amount) || 0,
+      status: o.status || 'completed',
+      date: o.order_date || '',  // ISO/SQL datetime string
+    }));
 
-    console.log('[THINY] Loaded from API:', PRODUCTS.length, 'products,', LOCATIONS.length, 'locations,', CUSTOMERS.length, 'customers,', liveChatOrders.length, 'chat orders');
+    console.log('[THINY] Loaded from API:', PRODUCTS.length, 'products,', LOCATIONS.length, 'locations,', CUSTOMERS.length, 'customers,', liveChatOrders.length, 'chat orders,', ORDERS.length, 'POS orders');
 
     return {
-      LOCATIONS, PRODUCTS, MOVEMENTS, CUSTOMERS,
+      LOCATIONS, PRODUCTS, MOVEMENTS, CUSTOMERS, ORDERS,
       CATEGORIES, CHANNELS, CHATS,
       SALES_TREND, CHANNEL_SPLIT,
       PREORDERS, CHAT_ORDERS: finalChatOrders,

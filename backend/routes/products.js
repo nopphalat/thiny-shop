@@ -41,11 +41,11 @@ router.post('/', async (req, res) => {
 
 // UPDATE product
 router.put('/:id', async (req, res) => {
-  const { name_th, name_en, name_lo, price, cost, barcode, sku, reorder_point } = req.body;
+  const { name_th, name_en, name_lo, price, cost, barcode, sku, image, reorder_point } = req.body;
   try {
     await run(
-      'UPDATE products SET name_th = ?, name_en = ?, name_lo = ?, price = ?, cost = ?, barcode = ?, sku = ?, reorder_point = ? WHERE id = ?',
-      [name_th, name_en, name_lo || '', price, cost, barcode || '', sku || '', reorder_point || 10, req.params.id]
+      'UPDATE products SET name_th = ?, name_en = ?, name_lo = ?, price = ?, cost = ?, barcode = ?, sku = ?, image = ?, reorder_point = ? WHERE id = ?',
+      [name_th, name_en, name_lo || '', price, cost, barcode || '', sku || '', image || '', reorder_point || 10, req.params.id]
     );
     res.json({ message: 'Product updated' });
   } catch (error) {

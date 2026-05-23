@@ -53,8 +53,20 @@ const Icon = ({ name, size = 18, className = "" }) => {
   return <svg {...p}>{paths[name] || null}</svg>;
 };
 
-// ---- Product image placeholders (geometric, no real photos) ----
+// ---- Product image: real upload OR geometric placeholder fallback ----
 const ProductImg = ({ id, size = "md", rounded = "rounded-lg" }) => {
+  const sizes = { sm: 56, md: 96, lg: 160, xl: 240 };
+  const dim = sizes[size] || 96;
+
+  // ถ้า id เป็น URL จริง (data: base64 หรือ http) → render <img>
+  if (typeof id === "string" && (id.startsWith("data:image") || id.startsWith("http"))) {
+    return (
+      <div className={`thiny-prodimg ${rounded}`} style={{ width: dim, height: dim, position: "relative", overflow: "hidden", flexShrink: 0, background: "#f7f7f5" }}>
+        <img src={id} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      </div>
+    );
+  }
+
   // Deterministic color from id
   const palettes = {
     "linen-tee":   ["#F2EBE0", "#C9B79C", "#7A6A55"],
