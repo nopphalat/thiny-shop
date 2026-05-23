@@ -5,39 +5,60 @@ const { useState, useMemo } = React;
 
 // AddProductModal component
 const AddProductModal = ({ t, onClose }) => {
-  const [form, setForm] = useState({ id: "", sku: "", name_th: "", name_en: "", price: "", cost: "", barcode: "" });
+  const [form, setForm] = useState({ id: "", sku: "", name_th: "", name_en: "", price: "", cost: "", barcode: "", quantity: "" });
   const [loading, setLoading] = useState(false);
+  const inp = (field, placeholder, type = "text", label) => (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 600 }}>{label}</label>
+      <input type={type} value={form[field]} onChange={e => setForm({...form, [field]: e.target.value})}
+        style={{ width: "100%", padding: "9px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+        placeholder={placeholder} />
+    </div>
+  );
 
   const handleAddProduct = async () => {
-    if (!form.id || !form.sku || !form.name_th || !form.price) {
-      alert("กรุณากรอกข้อมูลให้ครบ");
+    if (!form.id || !form.name_th || !form.price) {
+      alert("กรุณากรอก: ID, ชื่อสินค้า, ราคา");
       return;
     }
     setLoading(true);
     try {
+      // 1. สร้างสินค้า
       const res = await fetch(window.API_BASE + "/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: form.id,
-          sku: form.sku,
+          id: form.id.toUpperCase(),
+          sku: form.sku || form.id.toUpperCase(),
           name_th: form.name_th,
           name_en: form.name_en || form.name_th,
           name_lo: "",
           price: parseFloat(form.price),
           cost: parseFloat(form.cost) || 0,
-          barcode: form.barcode,
-          image: form.id,
-          reorder_point: 30,
+          barcode: form.barcode || "",
+          image: form.id.toLowerCase(),
+          reorder_point: 10,
         }),
       });
-      if (res.ok) {
-        alert("เพิ่มสินค้าสำเร็จ");
-        onClose();
-        window.location.reload();
-      } else {
-        alert("เกิดข้อผิดพลาด");
+      if (!res.ok) { alert("เกิดข้อผิดพลาด: " + (await res.text())); setLoading(false); return; }
+
+      // 2. เพิ่มสต๊อกเริ่มต้น (ถ้ากรอกจำนวน)
+      const qty = parseInt(form.quantity) || 0;
+      if (qty > 0) {
+        const locs = window.THINY_DATA?.LOCATIONS || [];
+        const loc = locs[0];
+        if (loc) {
+          await fetch(window.API_BASE + "/stock", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ product_id: form.id.toUpperCase(), location_id: loc.id, quantity: qty }),
+          }).catch(() => {}); // stock route may use PUT — try POST first
+        }
       }
+
+      alert("✅ เพิ่มสินค้าสำเร็จ" + (qty > 0 ? ` · สต๊อก ${qty} ชิ้น` : ""));
+      onClose();
+      window.location.reload();
     } catch (e) {
       alert("เกิดข้อผิดพลาด: " + e.message);
     }
@@ -46,42 +67,33 @@ const AddProductModal = ({ t, onClose }) => {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div style={{ background: "white", borderRadius: "12px", padding: "32px", width: "90%", maxWidth: "500px", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-        <h2 style={{ margin: "0 0 24px 0", fontSize: "20px", fontWeight: 600 }}>เพิ่มสินค้าใหม่</h2>
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: 500 }}>ID สินค้า</label>
-          <input type="text" value={form.id} onChange={(e) => setForm({...form, id: e.target.value})} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", boxSizing: "border-box" }} placeholder="P013" />
+      <div style={{ background: "white", borderRadius: 14, padding: 28, width: "90%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+        <h2 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 700 }}>+ เพิ่มสินค้าใหม่</h2>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div>{inp("id", "P001", "text", "ID สินค้า *")}</div>
+          <div>{inp("sku", "TS-XXX-001", "text", "SKU")}</div>
         </div>
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: 500 }}>SKU</label>
-          <input type="text" value={form.sku} onChange={(e) => setForm({...form, sku: e.target.value})} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", boxSizing: "border-box" }} placeholder="TS-XXX-001" />
+        {inp("name_th", "ชื่อสินค้าภาษาไทย", "text", "ชื่อสินค้า (ไทย) *")}
+        {inp("name_en", "Product name", "text", "ชื่อสินค้า (English)")}
+        {inp("barcode", "8851234567000", "text", "Barcode")}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          <div>{inp("price", "0", "number", "ราคาขาย *")}</div>
+          <div>{inp("cost", "0", "number", "ต้นทุน")}</div>
+          <div>{inp("quantity", "0", "number", "จำนวนเริ่มต้น")}</div>
         </div>
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: 500 }}>ชื่อ (ไทย)</label>
-          <input type="text" value={form.name_th} onChange={(e) => setForm({...form, name_th: e.target.value})} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", boxSizing: "border-box" }} placeholder="ชื่อสินค้า" />
-        </div>
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: 500 }}>ชื่อ (English)</label>
-          <input type="text" value={form.name_en} onChange={(e) => setForm({...form, name_en: e.target.value})} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", boxSizing: "border-box" }} placeholder="Product name" />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
-          <div>
-            <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: 500 }}>ราคา</label>
-            <input type="number" value={form.price} onChange={(e) => setForm({...form, price: e.target.value})} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", boxSizing: "border-box" }} placeholder="0" />
+
+        {form.price && form.cost && parseFloat(form.price) > 0 && (
+          <div style={{ padding: "8px 12px", background: "#F0FDF4", borderRadius: 8, fontSize: 12, color: "#0A8754", marginBottom: 14 }}>
+            Margin: {Math.round((1 - parseFloat(form.cost || 0) / parseFloat(form.price)) * 100)}%
           </div>
-          <div>
-            <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: 500 }}>ต้นทุน</label>
-            <input type="number" value={form.cost} onChange={(e) => setForm({...form, cost: e.target.value})} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", boxSizing: "border-box" }} placeholder="0" />
-          </div>
-        </div>
-        <div style={{ marginBottom: "24px" }}>
-          <label style={{ display: "block", marginBottom: "6px", fontSize: "14px", fontWeight: 500 }}>Barcode</label>
-          <input type="text" value={form.barcode} onChange={(e) => setForm({...form, barcode: e.target.value})} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", boxSizing: "border-box" }} placeholder="8851234567000" />
-        </div>
-        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ padding: "8px 16px", border: "1px solid #ddd", borderRadius: "6px", background: "white", cursor: "pointer", fontSize: "14px", fontWeight: 500 }}>ยกเลิก</button>
-          <button onClick={handleAddProduct} disabled={loading} style={{ padding: "8px 16px", borderRadius: "6px", background: "#0F4C81", color: "white", cursor: loading ? "not-allowed" : "pointer", fontSize: "14px", fontWeight: 500, opacity: loading ? 0.7 : 1 }}>
-            {loading ? "กำลังเพิ่ม..." : "เพิ่มสินค้า"}
+        )}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+          <button onClick={onClose} style={{ padding: "9px 18px", border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontSize: 14 }}>ยกเลิก</button>
+          <button onClick={handleAddProduct} disabled={loading} style={{ padding: "9px 22px", background: "#0F4C81", color: "white", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
+            {loading ? "กำลังบันทึก..." : "เพิ่มสินค้า"}
           </button>
         </div>
       </div>
@@ -786,115 +798,164 @@ const ScreenProducts = ({ t, lang, onPick, onAdd }) => {
 };
 
 // ---------------- PRODUCT DETAIL ----------------
+const ReceiveStockModal = ({ product, onClose, onDone }) => {
+  const [qty, setQty] = useState("");
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(false);
+  const loc = (window.THINY_DATA.LOCATIONS || [])[0];
+
+  const handleReceive = async () => {
+    const n = parseInt(qty);
+    if (!n || n <= 0) { alert("กรุณากรอกจำนวนที่ถูกต้อง"); return; }
+    if (!loc) { alert("ยังไม่มี location ในระบบ"); return; }
+    setLoading(true);
+    try {
+      const current = product.stockByLoc?.[loc.id] || 0;
+      const res = await fetch(window.API_BASE + "/stock/" + encodeURIComponent(product.id) + "/" + encodeURIComponent(loc.id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: current + n }),
+      });
+      if (res.ok) {
+        product.stockByLoc = product.stockByLoc || {};
+        product.stockByLoc[loc.id] = current + n;
+        if (window.logAudit) window.logAudit("stock_receive", "product", product.id, `รับเข้า ${n} ชิ้น · ${note || "—"}`);
+        onDone();
+      } else {
+        alert("เกิดข้อผิดพลาด");
+      }
+    } catch (e) { alert("Error: " + e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div style={{ background: "white", borderRadius: 14, padding: 28, width: "90%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+        <h3 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 700 }}>+ รับสินค้าเข้าสต๊อก</h3>
+        <div style={{ fontSize: 13, color: "#888", marginBottom: 20 }}>{product.name?.th || product.name}</div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>จำนวนที่รับเข้า</label>
+          <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 16, boxSizing: "border-box" }}
+            placeholder="เช่น 50" autoFocus />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>หมายเหตุ (ไม่บังคับ)</label>
+          <input type="text" value={note} onChange={e => setNote(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            placeholder="เช่น รับจาก Shopee รอบที่ 1" />
+        </div>
+        {loc && <div style={{ padding: "8px 12px", background: "#F0F7FF", borderRadius: 8, fontSize: 12, color: "#0F4C81", marginBottom: 20 }}>
+          📍 เพิ่มเข้า: <strong>{loc.name_th || loc.name?.th || "ร้านหลัก"}</strong> · คงเหลือปัจจุบัน: {product.stockByLoc?.[loc.id] || 0} ชิ้น
+        </div>}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "9px 18px", border: "1px solid #ddd", borderRadius: 8, background: "white", cursor: "pointer", fontSize: 14 }}>ยกเลิก</button>
+          <button onClick={handleReceive} disabled={loading} style={{ padding: "9px 22px", background: "#0F4C81", color: "white", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
+            {loading ? "กำลังบันทึก..." : "บันทึก"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ScreenProductDetail = ({ t, lang, pid, onBack }) => {
   const p = window.THINY_DATA.PRODUCTS.find((x) => x.id === pid);
-  const { LOCATIONS, MOVEMENTS } = window.THINY_DATA;
-  const total = Object.values(p.stockByLoc).reduce((a, b) => a + b, 0);
-  const moves = MOVEMENTS.filter((m) => m.product === pid).slice(0, 6);
+  const { MOVEMENTS } = window.THINY_DATA;
+  const [showReceive, setShowReceive] = useState(false);
+  const [, forceUpdate] = useState(0);
+
+  if (!p) return <div className="thiny-screen"><button className="thiny-back" onClick={onBack}>← กลับ</button><div style={{padding:40,textAlign:"center",color:"#888"}}>ไม่พบสินค้า</div></div>;
+
+  const total = Object.values(p.stockByLoc || {}).reduce((a, b) => a + b, 0);
+  const moves = MOVEMENTS.filter((m) => m.product === pid).slice(0, 8);
+  const margin = p.cost > 0 ? Math.round((1 - p.cost / p.price) * 100) : null;
+  const isLowStock = total <= (p.reorder || 10);
+
   return (
     <div className="thiny-screen">
       <button className="thiny-back" onClick={onBack}><Icon name="chev" size={14} className="thiny-rot180" />{t.common.back}</button>
-      <div className="thiny-row">
-        <div className="thiny-card thiny-pd-main">
-          <div className="thiny-pd-head">
-            <ProductImg id={p.image} size="xl" rounded="rounded-xl" />
-            <div className="thiny-pd-info">
-              <div className="thiny-pd-cat">{window.THINY_DATA.CATEGORIES.find((c) => c.id === p.category).name[lang]}</div>
-              <h2 className="thiny-h2">{p.name[lang]}</h2>
-              <div className="thiny-pd-codes">
-                <span className="thiny-chip">SKU {p.sku}</span>
-                <span className="thiny-chip">Barcode {p.barcode}</span>
-                <span className="thiny-chip">ID {p.id}</span>
+
+      {showReceive && <ReceiveStockModal product={p} onClose={() => setShowReceive(false)} onDone={() => { setShowReceive(false); forceUpdate(n => n + 1); }} />}
+
+      {/* ── Header card ── */}
+      <div className="thiny-card" style={{ marginBottom: 14 }}>
+        <div className="thiny-pd-head">
+          <ProductImg id={p.image} size="xl" rounded="rounded-xl" />
+          <div className="thiny-pd-info" style={{ flex: 1 }}>
+            <div className="thiny-pd-cat">{(window.THINY_DATA.CATEGORIES || []).find((c) => c.id === p.category)?.name?.[lang] || p.category}</div>
+            <h2 className="thiny-h2">{p.name?.[lang] || p.name?.th || p.name}</h2>
+            <div className="thiny-pd-codes">
+              {p.sku && <span className="thiny-chip">SKU {p.sku}</span>}
+              {p.barcode && <span className="thiny-chip">Barcode {p.barcode}</span>}
+              <span className="thiny-chip">ID {p.id}</span>
+            </div>
+
+            {/* Stats row */}
+            <div className="thiny-pd-stats" style={{ marginTop: 14 }}>
+              <div>
+                <div className="thiny-pd-stat-label">{t.common.price}</div>
+                <div className="thiny-pd-stat-value">{fmtMoney(p.price, lang)}</div>
               </div>
-              <div className="thiny-pd-stats">
-                <div><div className="thiny-pd-stat-label">{t.common.price}</div><div className="thiny-pd-stat-value">{fmtMoney(p.price, lang)}</div></div>
-                <div><div className="thiny-pd-stat-label">{t.products.cost}</div><div className="thiny-pd-stat-value">{fmtMoney(p.cost, lang)}</div></div>
-                <div><div className="thiny-pd-stat-label">Margin</div><div className="thiny-pd-stat-value" style={{ color: "var(--c-ok)" }}>{Math.round((1 - p.cost / p.price) * 100)}%</div></div>
-                <div><div className="thiny-pd-stat-label">{t.products.onhand}</div><div className="thiny-pd-stat-value">{total}</div></div>
+              {p.cost > 0 && <div>
+                <div className="thiny-pd-stat-label">ต้นทุน</div>
+                <div className="thiny-pd-stat-value">{fmtMoney(p.cost, lang)}</div>
+              </div>}
+              {margin !== null && <div>
+                <div className="thiny-pd-stat-label">Margin</div>
+                <div className="thiny-pd-stat-value" style={{ color: margin >= 30 ? "var(--c-ok)" : "var(--c-warn)" }}>{margin}%</div>
+              </div>}
+              <div>
+                <div className="thiny-pd-stat-label">คงเหลือ</div>
+                <div className="thiny-pd-stat-value" style={{ color: isLowStock ? "var(--c-err)" : "inherit", fontWeight: 700, fontSize: 20 }}>{total}</div>
               </div>
-              <div className="thiny-pd-actions">
-                <button className="thiny-btn thiny-btn-primary" onClick={() => alert('รับสินค้า: ' + p.name[lang])}><Icon name="plus" size={14} />{t.common.receive}</button>
-                <button className="thiny-btn-ghost" onClick={() => alert('โอนย้ายสินค้า: ' + p.name[lang])}><Icon name="movement" size={14} />{t.common.transfer}</button>
-                <button className="thiny-btn-ghost" onClick={() => alert('แก้ไขสินค้า: ' + p.name[lang])}><Icon name="settings" size={14} />{t.common.edit}</button>
-              </div>
             </div>
-          </div>
 
-          <div className="thiny-pd-section">
-            <h3 className="thiny-h3">{t.location.title.split(" ")[0]} · {t.products.onhand}</h3>
-            <div className="thiny-loc-grid">
-              {LOCATIONS.map((loc) => {
-                const qty = p.stockByLoc[loc.id] || 0;
-                const reorderPerLoc = Math.ceil(p.reorder / LOCATIONS.length);
-                return (
-                  <div key={loc.id} className="thiny-loc-card">
-                    <div className="thiny-loc-head">
-                      <Icon name={loc.type === "warehouse" ? "box" : "location"} size={14} />
-                      <span className="thiny-loc-code">{loc.code}</span>
-                    </div>
-                    <div className="thiny-loc-name">{loc.name[lang]}</div>
-                    <div className="thiny-loc-qty">
-                      <span className="thiny-loc-num" style={{ color: qty < reorderPerLoc ? "var(--c-warn)" : "inherit" }}>{qty}</span>
-                      <span className="thiny-fg-3 thiny-xs">/ min {reorderPerLoc}</span>
-                    </div>
-                    <div className="thiny-loc-bar"><div style={{ width: `${Math.min(100, qty / (reorderPerLoc * 4) * 100)}%`, background: qty < reorderPerLoc ? "var(--c-warn)" : "var(--c-accent)" }} /></div>
-                  </div>);
-
-              })}
+            {/* Action buttons */}
+            <div className="thiny-pd-actions" style={{ marginTop: 16, flexWrap: "wrap", gap: 8 }}>
+              <button className="thiny-btn thiny-btn-primary" onClick={() => setShowReceive(true)}>
+                <Icon name="plus" size={14} /> + รับสินค้าเข้า
+              </button>
+              <button className="thiny-btn-ghost" onClick={() => alert('แก้ไขสินค้า: ' + (p.name?.[lang] || p.name?.th))}>
+                <Icon name="settings" size={14} /> แก้ไข
+              </button>
             </div>
-          </div>
-
-          <div className="thiny-pd-section">
-            <h3 className="thiny-h3">{t.dash.recentMovement}</h3>
-            <table className="thiny-table thiny-table-soft">
-              <thead><tr><th>{t.movement.type}</th><th>{t.common.qty}</th><th>{t.movement.from}</th><th>{t.movement.to}</th><th>{t.movement.user}</th><th>Date</th><th>{t.movement.ref}</th></tr></thead>
-              <tbody>
-                {moves.map((m) => {
-                  const locName = (id) => LOCATIONS.find((l) => l.id === id)?.name[lang] || (id === "supplier" ? "Supplier" : id === "customer" ? "Customer" : id);
-                  return (
-                    <tr key={m.id}>
-                      <td><MoveTag type={m.type} t={t} /></td>
-                      <td><strong>{m.type === "out" || m.type === "adjust" && m.qty < 0 ? "−" : "+"}{Math.abs(m.qty)}</strong></td>
-                      <td className="thiny-fg-2">{locName(m.from)}</td>
-                      <td className="thiny-fg-2">{locName(m.to)}</td>
-                      <td className="thiny-fg-2">{m.user}</td>
-                      <td className="thiny-fg-2 thiny-xs">{m.date}</td>
-                      <td className="thiny-mono thiny-xs">{m.ref}</td>
-                    </tr>);
-
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="thiny-card thiny-pd-side">
-          <div className="thiny-card-title">{t.location.autoSync}</div>
-          <div className="thiny-auto-rule">
-            <div>
-              <div className="thiny-strong">หักสต๊อกอัตโนมัติ</div>
-              <div className="thiny-fg-3 thiny-xs">ตัดจากคลังที่ใกล้ลูกค้าที่สุด</div>
-            </div>
-            <Toggle checked={true} />
-          </div>
-          <div className="thiny-auto-rule">
-            <div>
-              <div className="thiny-strong">โอนย้ายอัตโนมัติเมื่อต่ำกว่า min</div>
-              <div className="thiny-fg-3 thiny-xs">ดึงจาก WH-01 → store</div>
-            </div>
-            <Toggle checked={true} />
-          </div>
-          <div className="thiny-auto-rule">
-            <div>
-              <div className="thiny-strong">แจ้งเตือนเมื่อต่ำ</div>
-              <div className="thiny-fg-3 thiny-xs">ส่ง LINE + email</div>
-            </div>
-            <Toggle checked={false} />
           </div>
         </div>
       </div>
-    </div>);
 
+      {/* ── Movement history ── */}
+      <div className="thiny-card">
+        <div className="thiny-card-head" style={{ marginBottom: 12 }}>
+          <div>
+            <div className="thiny-card-title">ประวัติการเคลื่อนไหว</div>
+            <div className="thiny-card-sub">{moves.length} รายการล่าสุด</div>
+          </div>
+        </div>
+        {moves.length === 0 ? (
+          <div className="thiny-empty" style={{ padding: "24px 0" }}>
+            <Icon name="movement" size={28} className="thiny-fg-3"/>
+            <div className="thiny-fg-3 thiny-xs">ยังไม่มีประวัติการเคลื่อนไหว</div>
+          </div>
+        ) : (
+          <table className="thiny-table thiny-table-soft">
+            <thead><tr><th>ประเภท</th><th>จำนวน</th><th>ผู้ทำรายการ</th><th>วันที่</th><th>อ้างอิง</th></tr></thead>
+            <tbody>
+              {moves.map((m) => (
+                <tr key={m.id}>
+                  <td><MoveTag type={m.type} t={t} /></td>
+                  <td><strong style={{ color: m.type === "out" ? "var(--c-err)" : "var(--c-ok)" }}>{m.type === "out" ? "−" : "+"}{Math.abs(m.qty)}</strong></td>
+                  <td className="thiny-fg-2">{m.user}</td>
+                  <td className="thiny-fg-2 thiny-xs">{m.date}</td>
+                  <td className="thiny-mono thiny-xs">{m.ref}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const Toggle = ({ checked: initial }) => {

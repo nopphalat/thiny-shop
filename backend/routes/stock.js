@@ -41,13 +41,29 @@ router.get('/:productId/:locationId', async (req, res) => {
   }
 });
 
+// CREATE or UPDATE stock (upsert)
+router.post('/', async (req, res) => {
+  const { product_id, location_id, quantity } = req.body;
+  if (!product_id || !location_id) return res.status(400).json({ error: 'product_id and location_id required' });
+  try {
+    await run(
+      'INSERT INTO stock (product_id, location_id, quantity) VALUES (?, ?, ?) ON CONFLICT(product_id, location_id) DO UPDATE SET quantity = excluded.quantity',
+      [product_id, location_id, quantity || 0]
+    );
+    res.status(201).json({ message: 'Stock saved', product_id, location_id, quantity });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // UPDATE stock quantity
 router.put('/:productId/:locationId', async (req, res) => {
   const { quantity } = req.body;
   try {
+    // upsert so it works even if row doesn't exist yet
     await run(
-      'UPDATE stock SET quantity = ? WHERE product_id = ? AND location_id = ?',
-      [quantity, req.params.productId, req.params.locationId]
+      'INSERT INTO stock (product_id, location_id, quantity) VALUES (?, ?, ?) ON CONFLICT(product_id, location_id) DO UPDATE SET quantity = excluded.quantity',
+      [req.params.productId, req.params.locationId, quantity]
     );
     res.json({ message: 'Stock updated' });
   } catch (error) {
