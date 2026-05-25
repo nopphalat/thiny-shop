@@ -52,7 +52,7 @@ const LoginScreen = ({ onLoginSuccess }) => {
   const [password, setPassword] = useStateAuth("");
   const [loading, setLoading] = useStateAuth(false);
   const [error, setError] = useStateAuth("");
-  const [showDemo, setShowDemo] = useStateAuth(true);
+  // Demo accounts removed from UI for security (repo is public)
 
   const doLogin = async (u, p) => {
     if (!u || !p) {
@@ -84,12 +84,6 @@ const LoginScreen = ({ onLoginSuccess }) => {
   const handleLogin = (e) => {
     e?.preventDefault();
     doLogin(username, password);
-  };
-
-  const quickLogin = (u, p) => {
-    setUsername(u);
-    setPassword(p);
-    doLogin(u, p);
   };
 
   return (
@@ -145,41 +139,6 @@ const LoginScreen = ({ onLoginSuccess }) => {
             {loading ? "กำลังเข้าสู่ระบบ..." : "🚪 เข้าสู่ระบบ"}
           </button>
         </form>
-
-        {showDemo && (
-          <div style={{ marginTop: 20, padding: 14, background: "#FAFAF7", borderRadius: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase" }}>🚀 Demo accounts · คลิกเพื่อล็อกอินทันที</span>
-              <button onClick={() => setShowDemo(false)} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: 14 }}>×</button>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <button type="button" onClick={() => quickLogin("owner", "owner123")}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "white", border: "1px solid #ddd", borderRadius: 8, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
-                <span style={{ width: 28, height: 28, borderRadius: 6, background: "#C77100", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12 }}>SK</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12 }}>👑 owner · สิริกร</div>
-                  <div style={{ fontSize: 10, color: "#888", fontFamily: "monospace" }}>password: owner123</div>
-                </div>
-              </button>
-              <button type="button" onClick={() => quickLogin("manager", "manager123")}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "white", border: "1px solid #ddd", borderRadius: 8, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
-                <span style={{ width: 28, height: 28, borderRadius: 6, background: "#0F4C81", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12 }}>MR</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12 }}>💼 manager · มณีรัตน์</div>
-                  <div style={{ fontSize: 10, color: "#888", fontFamily: "monospace" }}>password: manager123</div>
-                </div>
-              </button>
-              <button type="button" onClick={() => quickLogin("staff", "staff123")}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "white", border: "1px solid #ddd", borderRadius: 8, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
-                <span style={{ width: 28, height: 28, borderRadius: 6, background: "#1F6F4A", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12 }}>NM</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12 }}>👷 staff · นัทธมน</div>
-                  <div style={{ fontSize: 10, color: "#888", fontFamily: "monospace" }}>password: staff123</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
 
         <div style={{ marginTop: 18, textAlign: "center", fontSize: 11, color: "#aaa" }}>
           THINY SHOP · Pre-order Management System
