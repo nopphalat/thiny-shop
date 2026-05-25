@@ -225,7 +225,7 @@ const ShopDetail = ({ t, lang, pid, onBack, onAdd, onCart }) => {
       </div>
 
       <div className="thiny-shop-detail-body">
-        <div className="thiny-shop-detail-cat">{window.THINY_DATA.CATEGORIES.find(c=>c.id===p.category).name[lang]}</div>
+        <div className="thiny-shop-detail-cat">{window.THINY_DATA.CATEGORIES.find(c=>c.id===p.category)?.name?.[lang] || p.category || ""}</div>
         <h2 className="thiny-shop-detail-name">{p.name[lang]}</h2>
         <div className="thiny-shop-detail-meta">
           <div className="thiny-shop-rating">
