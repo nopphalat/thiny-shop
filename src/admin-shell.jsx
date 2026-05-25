@@ -247,7 +247,7 @@ const AddProductModal = ({ t, onClose }) => {
 const NAV = [
 { id: "dashboard", icon: "dashboard" },
 { id: "products", icon: "products" },
-{ id: "chatOrders", icon: "chat", badge: 2 },
+{ id: "chatOrders", icon: "chat" },
 { id: "scan", icon: "scan" },
 { id: "calendar", icon: "movement" },
 { id: "customers", icon: "customers" },
@@ -314,13 +314,21 @@ const AdminApp = ({ t, lang }) => {
           </div>
         </div>
         <nav className="thiny-nav">
-          {NAV.filter(n => window.canAccess ? window.canAccess(currentUser, n.id) : true).map((n) =>
-          <button key={n.id} className={`thiny-nav-item ${route === n.id ? "active" : ""}`} onClick={() => {setRoute(n.id);setSelectedProduct(null);}}>
-              <Icon name={n.icon} size={18} />
-              <span>{t.nav[n.id]}</span>
-              {n.badge && <span className="thiny-nav-badge">{n.badge}</span>}
-            </button>
-          )}
+          {NAV.filter(n => window.canAccess ? window.canAccess(currentUser, n.id) : true).map((n) => {
+            // Dynamic badge: count of chat orders needing attention
+            let badge = 0;
+            if (n.id === "chatOrders") {
+              const orders = window.THINY_DATA?.CHAT_ORDERS || [];
+              badge = orders.filter(o => o.status === "new" || o.status === "awaitingPayment").length;
+            }
+            return (
+              <button key={n.id} className={`thiny-nav-item ${route === n.id ? "active" : ""}`} onClick={() => {setRoute(n.id);setSelectedProduct(null);}}>
+                <Icon name={n.icon} size={18} />
+                <span>{t.nav[n.id]}</span>
+                {badge > 0 && <span className="thiny-nav-badge">{badge}</span>}
+              </button>
+            );
+          })}
           {/* Owner-only menus */}
           {currentUser?.role === "owner" && (
             <>
