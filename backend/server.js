@@ -29,6 +29,27 @@ app.use(cors({ origin: corsCheck, credentials: true }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Lazy DB init — runs once per cold-start (esp. for Vercel serverless)
+let initPromise = null;
+function ensureInit() {
+  if (!initPromise) {
+    initPromise = initializeDatabase().catch(err => {
+      console.error('Failed to initialize database:', err);
+      initPromise = null;
+      throw err;
+    });
+  }
+  return initPromise;
+}
+app.use(async (req, res, next) => {
+  try {
+    await ensureInit();
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Database init failed: ' + err.message });
+  }
+});
+
 // Routes
 const productsRouter = require('./routes/products');
 const locationsRouter = require('./routes/locations');
@@ -69,11 +90,14 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 8080;
 
-initializeDatabase().then(() => {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
-}).catch((err) => {
-  console.error('Failed to initialize database:', err);
-  process.exit(1);
-});
+// Only listen() when running as a normal Node server (not on Vercel serverless)
+if (!process.env.VERCEL) {
+  ensureInit().then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  }).catch(() => process.exit(1));
+}
+
+// Export for Vercel and tests
+module.exports = app;
