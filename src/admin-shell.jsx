@@ -252,8 +252,7 @@ const NAV = [
 { id: "calendar", icon: "movement" },
 { id: "customers", icon: "customers" },
 { id: "finance", icon: "reports" },
-{ id: "reports", icon: "reports" },
-{ id: "settings", icon: "settings" }];
+{ id: "reports", icon: "reports" }];
 
 
 const AdminApp = ({ t, lang }) => {
@@ -475,7 +474,6 @@ const AdminApp = ({ t, lang }) => {
           {route === "calendar" && <ScreenCalendar t={t} lang={lang} goto={setRoute} />}
           {route === "finance" && <ScreenFinance t={t} lang={lang} />}
           {route === "reports" && <ScreenReports t={t} lang={lang} />}
-          {route === "settings" && <ScreenSettings t={t} lang={lang} />}
           {route === "users" && currentUser?.role === "owner" && <ScreenUsers t={t} lang={lang} currentUser={currentUser} />}
           {route === "audit" && currentUser?.role === "owner" && <ScreenAuditLog t={t} lang={lang} />}
         </div>
