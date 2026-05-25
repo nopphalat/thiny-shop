@@ -13,7 +13,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: CORS_ORIGIN
-        value: https://thiny-shop.pages.dev,https://thiny-shop.onrender.com
+        value: https://thiny-shop.pages.dev,https://thiny-shop.onrender.com,https://nopphalat.github.io
       - key: TURSO_URL
         sync: false
       - key: TURSO_AUTH_TOKEN
