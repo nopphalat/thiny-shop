@@ -19,11 +19,10 @@ services:
       - key: TURSO_AUTH_TOKEN
         sync: false
 
-  # ===== Frontend Static Site =====
+  # ===== Frontend Static Site (no region — served globally via CDN) =====
   - type: web
     name: thiny-shop
     runtime: static
-    region: singapore
     buildCommand: ""
     staticPublishPath: ./
     autoDeploy: true
