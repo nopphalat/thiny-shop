@@ -83,8 +83,6 @@ const ProductImg = ({ id, size = "md", rounded = "rounded-lg" }) => {
     "mask":        ["#EFE7F5", "#9B7BC4", "#3E2B5C"],
   };
   const palette = palettes[id] || ["#EEE", "#999", "#333"];
-  const sizes = { sm: 56, md: 96, lg: 160, xl: 240 };
-  const dim = sizes[size] || 96;
   // Different shape compositions per product type
   const shapeMap = {
     "linen-tee":   "tshirt",
