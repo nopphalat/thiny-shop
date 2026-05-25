@@ -7,11 +7,25 @@ const { initializeDatabase } = require('./init-db');
 
 const app = express();
 
-// Middleware
-const corsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-  : true; // allow all in dev
-app.use(cors({ origin: corsOrigins, credentials: true }));
+// Middleware — flexible CORS that accepts all known frontends
+const envOrigins = (process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
+const corsCheck = (origin, callback) => {
+  // No origin (curl/server-to-server) → allow
+  if (!origin) return callback(null, true);
+  // Explicit allowlist from env
+  if (envOrigins.includes(origin)) return callback(null, true);
+  // Any GitHub Pages site
+  if (origin.endsWith('.github.io')) return callback(null, true);
+  // Any Render-hosted site
+  if (origin.endsWith('.onrender.com')) return callback(null, true);
+  // Any Cloudflare Pages site
+  if (origin.endsWith('.pages.dev')) return callback(null, true);
+  // Local dev
+  if (origin.startsWith('http://localhost:')) return callback(null, true);
+  // Otherwise — block
+  callback(new Error('Not allowed by CORS: ' + origin));
+};
+app.use(cors({ origin: corsCheck, credentials: true }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
