@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: thiny-shop-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    region: singapore
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        value: https://thiny-shop.pages.dev
+      # ต้องตั้งค่าเองในหน้า dashboard (ห้ามใส่ใน git):
+      - key: TURSO_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
