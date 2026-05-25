@@ -29,7 +29,8 @@ app.use(cors({ origin: corsCheck, credentials: true }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Lazy DB init — runs once per cold-start (esp. for Vercel serverless)
+// DB init helper — only used when running as a standalone server (not on serverless)
+// On Vercel, the DB is assumed to already be initialized (run init separately if needed)
 let initPromise = null;
 function ensureInit() {
   if (!initPromise) {
@@ -41,14 +42,6 @@ function ensureInit() {
   }
   return initPromise;
 }
-app.use(async (req, res, next) => {
-  try {
-    await ensureInit();
-    next();
-  } catch (err) {
-    res.status(500).json({ error: 'Database init failed: ' + err.message });
-  }
-});
 
 // Routes
 const productsRouter = require('./routes/products');
