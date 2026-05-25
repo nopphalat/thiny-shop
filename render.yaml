@@ -1,4 +1,5 @@
 services:
+  # ===== Backend API =====
   - type: web
     name: thiny-shop-api
     runtime: docker
@@ -12,9 +13,28 @@ services:
       - key: NODE_ENV
         value: production
       - key: CORS_ORIGIN
-        value: https://thiny-shop.pages.dev
-      # ต้องตั้งค่าเองในหน้า dashboard (ห้ามใส่ใน git):
+        value: https://thiny-shop.pages.dev,https://thiny-shop.onrender.com
       - key: TURSO_URL
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
+
+  # ===== Frontend Static Site =====
+  - type: web
+    name: thiny-shop
+    runtime: static
+    region: singapore
+    buildCommand: ""
+    staticPublishPath: ./
+    autoDeploy: true
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache, must-revalidate
+      - path: /src/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
