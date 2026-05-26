@@ -1126,15 +1126,16 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
     try {
       scanner = new window.Html5Qrcode("multisell-camera", {
         formatsToSupport: fmts ? [
-          fmts.CODE_128, fmts.CODE_39, fmts.CODE_93, fmts.ITF,
-          fmts.EAN_13, fmts.EAN_8, fmts.QR_CODE,
+          fmts.CODE_128, fmts.EAN_13, fmts.EAN_8, fmts.QR_CODE,
         ] : undefined,
+        useBarCodeDetectorIfSupported: true,  // native API = เร็วสุด
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
         verbose: false,
       });
       scannerRef.current = scanner;
       scanner.start(
         { facingMode: "environment" },
-        { fps: 30, qrbox: { width: 260, height: 260 }, aspectRatio: 1.7778 },
+        { fps: 30, qrbox: { width: 260, height: 260 }, aspectRatio: 1.7778, disableFlip: true },
         (decoded) => {
           handleScanResult(decoded);
           scanner.stop().catch(() => {});

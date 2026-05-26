@@ -960,23 +960,23 @@ const ScreenScan = ({ t, lang }) => {
     if (!cameraActive) return;
     let scanner;
     try {
-      // จำกัดเฉพาะ format ที่ใช้บนพัสดุไทย → เร็วกว่าสแกนทุก format ~5x
+      // จำกัด format + ใช้ native BarcodeDetector API ถ้ามี → เร็วกว่า zxing 5-10x
       const fmts = window.Html5QrcodeSupportedFormats;
       scanner = new window.Html5Qrcode("thiny-camera-view", {
         formatsToSupport: fmts ? [
           fmts.CODE_128,  // Shopee, Lazada, Flash, J&T, Kerry
-          fmts.CODE_39,
-          fmts.CODE_93,
-          fmts.ITF,
           fmts.EAN_13,
-          fmts.QR_CODE,   // QR code ทั่วไป
+          fmts.EAN_8,
+          fmts.QR_CODE,
         ] : undefined,
+        useBarCodeDetectorIfSupported: true,  // ใช้ native API (เร็วสุด)
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
         verbose: false,
       });
       scannerRef.current = scanner;
       scanner.start(
         { facingMode: "environment" },
-        { fps: 30, qrbox: { width: 260, height: 260 }, aspectRatio: 1.7778 },
+        { fps: 30, qrbox: { width: 260, height: 260 }, aspectRatio: 1.7778, disableFlip: true },
         (decodedText) => {
           // เสียงสัญญาณสแกนสำเร็จ
           if (window.AudioContext || window.webkitAudioContext) {
