@@ -580,7 +580,7 @@ const ScreenDashboard = ({ t, lang, goto }) => {
       <DirectSalesSummary />
 
       {/* ============ KPI ROW ============ */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 16 }}>
         <div style={{ background: "linear-gradient(135deg, #0F4C81 0%, #1565A8 100%)", color: "white", padding: 18, borderRadius: 12 }}>
           <div style={{ fontSize: 11, opacity: 0.85, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>📦 ออเดอร์วันนี้</div>
           <div style={{ fontSize: 32, fontWeight: 800, marginTop: 6 }}>{todayOrders.length}</div>
@@ -612,7 +612,7 @@ const ScreenDashboard = ({ t, lang, goto }) => {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
           {/* รอชำระ */}
           <button onClick={() => goto("chatOrders")} style={{
             padding: 14, border: "2px solid #FEF3D3", background: "#FFFCF5",

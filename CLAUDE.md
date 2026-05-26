@@ -129,6 +129,7 @@ For "what should I do" questions, give numbered steps not paragraphs.
 - After commit + push: also update `## Recent changes` below
 
 ## Recent changes (newest first — keep last ~20)
+- **Mobile-responsive Dashboard grids** — KPI row + "สิ่งที่ต้องทำ" used `repeat(4, 1fr)` which squeezed text on mobile. Changed to `repeat(auto-fit, minmax(170px/140px, 1fr))` → wraps 2×2 on iPhone 14 Pro Max, 4×1 on desktop.
 - **Scanner speed boost** — `useBarCodeDetectorIfSupported: true` + `disableFlip: true` in both `admin-screens.jsx` ScreenScan and `admin-shell.jsx` MultiSellModal. Native API → 5-10× faster on Chrome/Edge.
 - **Camera scan in MultiSell** — small 📷 button next to product search input opens full-screen scanner overlay; matches barcode/SKU/id → addToCart + beep.
 - **Edit-everything button on chat order detail** — `admin-chat.jsx`. `AddChatOrderModal` now takes `editingOrder` prop. Removed the 3 mock "Update status" buttons (alert-only duplicates of status timeline below). New "✏️ แก้ไข" button next to print bill.
