@@ -202,31 +202,50 @@ const printBillFor = (o, lang = "th") => {
 // =========================================================
 // Add Chat Order Modal
 // =========================================================
-const AddChatOrderModal = ({ t, lang, onClose, onSave }) => {
+const AddChatOrderModal = ({ t, lang, onClose, onSave, editingOrder = null }) => {
   const { PRODUCTS, CHATS, CHANNELS } = window.THINY_DATA;
-  const [form, setForm] = useStateC({
-    // ลูกค้า
-    customerName: "",
-    customerPhone: "",
-    customerAddress: "",
-    channel: "whatsapp",
-    lastMessage: "",
-    // สินค้าที่ลูกค้าสั่ง
-    productName: "",
-    productOptions: "",  // เช่น "Size 40 / สีดำ"
-    qty: 1,
-    pricePerUnit: 0,
-    // แพลตฟอร์มที่เราไปสั่ง
-    platform: "shopee",
-    sourceTracking: "",   // tracking ขาเข้า (จาก platform → ร้านเรา)
-    sourceCost: 0,        // ราคาที่เราซื้อจาก platform
-    // ค่าบริการ
-    serviceFee: 50,       // ค่าบริการสั่งซื้อให้ลูกค้า
-    // การชำระเงินจากลูกค้า
-    paymentMethod: "transfer", // transfer | cod
-    paymentStatus: "unpaid",   // unpaid | paid
-    // สถานะ
-    status: "new",
+  const isEdit = !!editingOrder;
+
+  // Populate form from existing order (edit mode) or defaults (add mode)
+  const [form, setForm] = useStateC(() => {
+    if (editingOrder) {
+      return {
+        customerName: editingOrder.customer?.name || "",
+        customerPhone: editingOrder.customer?.phone || "",
+        customerAddress: editingOrder.customer?.address || "",
+        channel: editingOrder.channel || "whatsapp",
+        lastMessage: editingOrder.lastMessage || "",
+        productName: editingOrder.customItem?.name || "",
+        productOptions: editingOrder.customItem?.options || "",
+        qty: editingOrder.customItem?.qty || 1,
+        pricePerUnit: editingOrder.customItem?.pricePerUnit || 0,
+        platform: editingOrder.platform || "shopee",
+        sourceTracking: editingOrder.sourceTracking || "",
+        sourceCost: editingOrder.sourceCost || 0,
+        serviceFee: editingOrder.serviceFee || 0,
+        paymentMethod: editingOrder.paymentMethod || "transfer",
+        paymentStatus: editingOrder.paymentStatus || "unpaid",
+        status: editingOrder.status || "new",
+      };
+    }
+    return {
+      customerName: "",
+      customerPhone: "",
+      customerAddress: "",
+      channel: "whatsapp",
+      lastMessage: "",
+      productName: "",
+      productOptions: "",
+      qty: 1,
+      pricePerUnit: 0,
+      platform: "shopee",
+      sourceTracking: "",
+      sourceCost: 0,
+      serviceFee: 50,
+      paymentMethod: "transfer",
+      paymentStatus: "unpaid",
+      status: "new",
+    };
   });
   const [saving, setSaving] = useStateC(false);
 
@@ -236,14 +255,14 @@ const AddChatOrderModal = ({ t, lang, onClose, onSave }) => {
   const totalCost = (parseFloat(form.sourceCost) || 0) * (parseInt(form.qty) || 0);
   const profit = customerTotal - totalCost;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.customerName.trim()) { alert("กรุณากรอกชื่อลูกค้า"); return; }
     if (!form.productName.trim()) { alert("กรุณากรอกชื่อสินค้า"); return; }
     if (form.qty < 1) { alert("จำนวนต้องมากกว่า 0"); return; }
     if (!form.pricePerUnit || form.pricePerUnit <= 0) { alert("กรุณากรอกราคาขายต่อชิ้น"); return; }
 
     setSaving(true);
-    const newId = "CH-" + (1043 + Math.floor(Math.random() * 9000));
+    const newId = isEdit ? editingOrder.id : "CH-" + (1043 + Math.floor(Math.random() * 9000));
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, "0");
     const mm = String(now.getMinutes()).padStart(2, "0");
@@ -281,9 +300,19 @@ const AddChatOrderModal = ({ t, lang, onClose, onSave }) => {
       // สถานะ
       status: form.status,
       lastMessage: form.lastMessage || "—",
-      created: now.toISOString().split("T")[0] + " " + hh + ":" + mm,
+      created: isEdit ? editingOrder.created : now.toISOString().split("T")[0] + " " + hh + ":" + mm,
+      // Preserve existing tracking on edit (those have their own UI flow)
+      tracking: isEdit ? (editingOrder.tracking || "") : "",
+      courier: isEdit ? (editingOrder.courier || "") : "",
     };
-    onSave(newOrder);
+    if (isEdit) {
+      // Mutate original object so React-rendered detail page picks it up
+      Object.assign(editingOrder, newOrder);
+      if (window.saveChatOrder) await window.saveChatOrder(editingOrder);
+      if (window.logAudit) window.logAudit("edit_order", "chat_order", editingOrder.id, `${form.customerName} · แก้ไขออเดอร์`);
+    } else {
+      onSave(newOrder);
+    }
     setSaving(false);
     onClose();
   };
@@ -299,8 +328,8 @@ const AddChatOrderModal = ({ t, lang, onClose, onSave }) => {
       <div style={{ background: "white", borderRadius: "12px", padding: "28px", width: "100%", maxWidth: "640px", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 700 }}>เพิ่มออเดอร์พรีออเดอร์</h2>
-            <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#888" }}>บันทึกข้อมูลลูกค้าที่สั่งของผ่านแชท</p>
+            <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 700 }}>{isEdit ? "✏️ แก้ไขออเดอร์" : "เพิ่มออเดอร์พรีออเดอร์"}</h2>
+            <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#888" }}>{isEdit ? `${editingOrder.id} · แก้ไขข้อมูลทั้งหมดของออเดอร์` : "บันทึกข้อมูลลูกค้าที่สั่งของผ่านแชท"}</p>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "24px", cursor: "pointer", color: "#999", padding: 0, lineHeight: 1 }}>×</button>
         </div>
@@ -921,6 +950,7 @@ const ChatOrderDetail = ({ t, lang, id, onBack }) => {
   const [copied, setCopied] = useStateC(false);
   const [scanMode, setScanMode] = useStateC(null); // "in" or "out"
   const [scanned, setScanned] = useStateC([]);
+  const [showEdit, setShowEdit] = useStateC(false);
   const [, forceUpdate] = useStateC(0);
 
   const persist = () => { if (window.saveChatOrder) window.saveChatOrder(o); };
@@ -1175,6 +1205,13 @@ const ChatOrderDetail = ({ t, lang, id, onBack }) => {
                     title="พิมพ์ใบจัดส่งเพื่อติดหน้ากล่อง"
                   >
                     🖨️ พิมพ์บิล
+                  </button>
+                  <button
+                    className="thiny-btn-ghost"
+                    onClick={() => setShowEdit(true)}
+                    title="แก้ไขข้อมูลออเดอร์ทั้งหมด"
+                  >
+                    ✏️ แก้ไข
                   </button>
                   <div style={{ position: "relative" }}>
                     <button className="thiny-btn-ghost" onClick={() => setShowNotifyMenu(!showNotifyMenu)}>
@@ -1507,24 +1544,16 @@ const ChatOrderDetail = ({ t, lang, id, onBack }) => {
             </button>
           </div>
 
-          <div className="thiny-pd-divider" />
-
-          <div className="thiny-card-title">Update status</div>
-          <div className="thiny-card-sub">เปลี่ยนสถานะออเดอร์</div>
-          <div style={{ height: 10 }} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <button className="thiny-btn-ghost" style={{ justifyContent: "flex-start" }} onClick={() => alert('ทำเครื่องหมายว่าชำระเงินแล้ว: ' + o.id)}>
-              <Icon name="check" size={14} /> {t.chat.markPaid}
-            </button>
-            <button className="thiny-btn-ghost" style={{ justifyContent: "flex-start" }} onClick={() => alert('ทำเครื่องหมายว่าแพ็คเสร็จแล้ว: ' + o.id)}>
-              <Icon name="box" size={14} /> {t.chat.markPacked}
-            </button>
-            <button className="thiny-btn-ghost" style={{ justifyContent: "flex-start" }} onClick={() => alert('ทำเครื่องหมายว่าจัดส่งแล้ว: ' + o.id)}>
-              <Icon name="truck" size={14} /> {t.chat.markShipped}
-            </button>
-          </div>
         </div>
       </div>
+      {showEdit && (
+        <AddChatOrderModal
+          t={t} lang={lang}
+          editingOrder={o}
+          onClose={() => setShowEdit(false)}
+          onSave={() => { /* not used in edit mode */ }}
+        />
+      )}
     </div>
   );
 };
