@@ -1060,6 +1060,8 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
   const [discountType, setDiscountType] = useState("baht"); // "baht" | "percent"
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(null); // saved receipt data after success
+  const [cameraActive, setCameraActive] = useState(false);
+  const scannerRef = React.useRef(null);
   const loc = (window.THINY_DATA.LOCATIONS || [])[0];
   const PRODUCTS = window.THINY_DATA.PRODUCTS || [];
 
@@ -1092,6 +1094,70 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
     }
     setSearch("");
   };
+
+  // Find product by scanned barcode/SKU/ID and add to cart
+  const handleScanResult = (code) => {
+    const trimmed = String(code).trim().toLowerCase();
+    const found = PRODUCTS.find(p =>
+      (p.barcode && p.barcode.toLowerCase() === trimmed) ||
+      (p.sku && p.sku.toLowerCase() === trimmed) ||
+      (p.id && p.id.toLowerCase() === trimmed)
+    );
+    if (found) {
+      addToCart(found);
+      // beep on success
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.connect(ctx.destination); osc.frequency.value = 880;
+        osc.start(); osc.stop(ctx.currentTime + 0.1);
+      } catch(e) {}
+    } else {
+      alert(`❌ ไม่พบสินค้าที่มี barcode/SKU: ${code}`);
+    }
+  };
+
+  // Camera scanner lifecycle (mirrors ScreenScan implementation)
+  useEffect(() => {
+    if (!cameraActive) return;
+    if (!window.Html5Qrcode) { alert("ไลบรารี่ยังโหลดไม่เสร็จ"); setCameraActive(false); return; }
+    const fmts = window.Html5QrcodeSupportedFormats;
+    let scanner;
+    try {
+      scanner = new window.Html5Qrcode("multisell-camera", {
+        formatsToSupport: fmts ? [
+          fmts.CODE_128, fmts.CODE_39, fmts.CODE_93, fmts.ITF,
+          fmts.EAN_13, fmts.EAN_8, fmts.QR_CODE,
+        ] : undefined,
+        verbose: false,
+      });
+      scannerRef.current = scanner;
+      scanner.start(
+        { facingMode: "environment" },
+        { fps: 30, qrbox: { width: 260, height: 260 }, aspectRatio: 1.7778 },
+        (decoded) => {
+          handleScanResult(decoded);
+          scanner.stop().catch(() => {});
+          scannerRef.current = null;
+          setCameraActive(false);
+        },
+        () => {} // ignore per-frame errors
+      ).catch(err => {
+        alert("ไม่สามารถเปิดกล้องได้ · " + (err.message || err));
+        setCameraActive(false);
+        scannerRef.current = null;
+      });
+    } catch(e) {
+      alert("เกิดข้อผิดพลาด: " + e.message);
+      setCameraActive(false);
+    }
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.stop().catch(() => {});
+        scannerRef.current = null;
+      }
+    };
+  }, [cameraActive]);
 
   const updateQty = (id, delta) => {
     setCart(cart.map(c => {
@@ -1263,11 +1329,33 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
 
         {/* Body */}
         <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
-          {/* Product search */}
-          <div style={{ marginBottom: 14 }}>
+          {/* Product search with camera scan button */}
+          <div style={{ marginBottom: 14, display: "flex", gap: 8 }}>
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="🔍 ค้นหาสินค้าด้วยชื่อ / SKU / barcode..."
-              style={{ width: "100%", padding: "11px 14px", border: "2px solid #0F4C81", borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
+              style={{ flex: 1, padding: "11px 14px", border: "2px solid #0F4C81", borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
+            <button type="button" onClick={() => setCameraActive(true)}
+              title="สแกนบาร์โค้ดด้วยกล้อง"
+              style={{ padding: "0 14px", background: "#0F4C81", color: "white", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", gap: 6 }}>
+              📷
+            </button>
+          </div>
+
+          {/* Camera overlay */}
+          {cameraActive && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20 }}>
+              <div style={{ width: "100%", maxWidth: 400, background: "#111", borderRadius: 14, overflow: "hidden", position: "relative" }}>
+                <div id="multisell-camera" style={{ width: "100%", minHeight: 280 }}></div>
+                <div style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: "80%", height: 2, background: "rgba(255,60,60,0.8)", boxShadow: "0 0 8px rgba(255,60,60,0.6)" }}></div>
+                </div>
+              </div>
+              <div style={{ color: "white", fontSize: 13, marginTop: 14 }}>ชี้กล้องไปที่บาร์โค้ดสินค้า</div>
+              <button onClick={() => setCameraActive(false)} style={{ marginTop: 14, padding: "10px 28px", background: "white", color: "#333", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }}>
+                ✕ ปิดกล้อง
+              </button>
+            </div>
+          )}
             {search && (
               <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid #eee", borderRadius: 10, marginTop: 6, background: "white" }}>
                 {filteredProducts.length === 0 ? (
@@ -1289,7 +1377,6 @@ const MultiSellModal = ({ onClose, onDone, lang = "th" }) => {
                 })}
               </div>
             )}
-          </div>
 
           {/* Cart */}
           <div style={{ marginBottom: 16 }}>
