@@ -1,6 +1,8 @@
 # THINY SHOP — Context for Claude
 
-> Read this file FIRST before any task. Saves tokens by skipping rediscovery.
+> **Read this file FIRST before any task.** Saves tokens by skipping rediscovery.
+>
+> **🔄 RULE FOR ME (Claude):** After ANY significant change to the codebase (new feature, removed feature, architecture change, URL change, password change), update this file IMMEDIATELY without being asked. Use the "## Recent changes" section at the bottom. Treat this as part of every commit.
 
 ## What this is
 ระบบจัดการ Pre-order + ร้านค้าออนไลน์ สำหรับร้านเล็ก (Laos/Thailand). React (no build tooling — Babel standalone in browser) + Node.js/Express + Turso (libSQL).
@@ -119,3 +121,28 @@ Or write a one-off script in `backend/*.js` (gitignored: clear-products.js, rese
 ## Prefer short responses
 The user prefers concise answers. If they ask "ตอบสั้น" or "สั้นๆ", reply in 2–3 lines.
 For "what should I do" questions, give numbered steps not paragraphs.
+
+## Pre-flight checks before any push
+- After editing any `.jsx` file: bump `?v=NN` in `index.html` (the version after `?v=`)
+- Validate syntax: `node -e "require('@babel/standalone').transform(require('fs').readFileSync('src/FILE.jsx','utf-8'),{presets:['react']})"` — caught duplicate-`sizes` + missing-`async`-`await` bugs earlier
+- Never use `await` in a non-`async` function (Babel will reject silently in browser → white screen)
+- After commit + push: also update `## Recent changes` below
+
+## Recent changes (newest first — keep last ~20)
+- **Scanner speed boost** — `useBarCodeDetectorIfSupported: true` + `disableFlip: true` in both `admin-screens.jsx` ScreenScan and `admin-shell.jsx` MultiSellModal. Native API → 5-10× faster on Chrome/Edge.
+- **Camera scan in MultiSell** — small 📷 button next to product search input opens full-screen scanner overlay; matches barcode/SKU/id → addToCart + beep.
+- **Edit-everything button on chat order detail** — `admin-chat.jsx`. `AddChatOrderModal` now takes `editingOrder` prop. Removed the 3 mock "Update status" buttons (alert-only duplicates of status timeline below). New "✏️ แก้ไข" button next to print bill.
+- **Dynamic chatOrders nav badge** — was hardcoded `badge: 2`. Now counts `o.status === 'new' || 'awaitingPayment'`. Hidden when 0.
+- **Removed Settings menu** — `ScreenSettings` was all mock toggles (referenced deleted `WH-01`, fake LINE notification). Removed from NAV + route handler.
+- **CLAUDE.md created** — this file. User asks me to keep it updated.
+- **Login security** — removed demo accounts panel that exposed `owner123/manager123/staff123`. Repo is public.
+- **Bug fix: shop.jsx category crash** — `.find(c=>c.id===p.category).name` now uses optional chaining.
+- **Bug scan results** — no syntax errors across all JSX files; 9 hardcoded `localhost:5000` fallbacks left intentionally (window.API_BASE is set synchronously so they never trigger).
+- **Migration history (3 hosts in 1 day)** — Fly.io (trial ended) → Render (ISP blocks `.onrender.com`) → Vercel (current). Frontend on Cloudflare Pages → moved to GitHub Pages because ISP blocks `.pages.dev`. `render.yaml` and `vercel.json` both kept as deploy configs.
+- **Skip DB init on serverless** — server.js no longer runs `initializeDatabase` per request (was causing 10s Vercel timeouts on POSTs). DB is assumed pre-initialized; init only runs when `!process.env.VERCEL`.
+- **Flexible CORS in server.js** — accepts any `.github.io`, `.onrender.com`, `.pages.dev`, plus comma-separated `CORS_ORIGIN` env list.
+- **GitHub Actions auto-deploy backend** — `.github/workflows/fly-deploy.yml` (legacy, Fly token in secrets). Vercel auto-deploys from GitHub natively now, no Action needed for backend.
+
+## Migration aftermath — Render services still exist
+The user's Render account still has `thiny-shop-api` (web) + `thiny-shop` (static) services running idle.
+They are unreachable from user's ISP but cost nothing on free tier. Safe to leave or delete via dashboard.
