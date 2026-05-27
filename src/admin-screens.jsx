@@ -544,12 +544,47 @@ const EditCustomerModal = ({ customer, onClose, onSaved }) => {
         <div style={{ display: "flex", gap: 10, justifyContent: "space-between", paddingTop: 16, borderTop: "1px solid #eee" }}>
           {isEdit && (
             <button onClick={async () => {
-              if (!confirm(`ลบ "${customer.name}" ออกจากระบบ?`)) return;
               const API = window.API_BASE || "http://localhost:5000/api";
-              await fetch(`${API}/customers/${customer.id}`, { method: "DELETE" });
-              if (window.logAudit) window.logAudit("delete_customer", "customer", customer.id, customer.name);
-              onSaved && onSaved();
-              onClose();
+              // Chat-only customers (id GUEST-* or source 'chat-only') only exist inside
+              // chat_orders rows — must delete those rows or the customer reappears on reload.
+              const isChatOnly = customer.source === "chat-only" || (customer.id || "").startsWith("GUEST-");
+              const norm = (p) => (p || "").replace(/[^0-9]/g, "").replace(/^0+/, "");
+              const cPhone = norm(customer.phone);
+              const linkedChatOrders = (window.THINY_DATA?.CHAT_ORDERS || []).filter(o => {
+                const oPhone = norm(o.customer?.phone);
+                if (cPhone && oPhone) return cPhone === oPhone;
+                return o.customer?.name === customer.name;
+              }).map(o => o.id);
+
+              let msg;
+              if (isChatOnly) {
+                msg = `ลูกค้านี้ถูกสร้างจากแชทออเดอร์\nต้องการลบ "${customer.name}" + ออเดอร์ ${linkedChatOrders.length} รายการทั้งหมดเลยไหม?`;
+              } else if (linkedChatOrders.length > 0) {
+                msg = `ลบ "${customer.name}" + ออเดอร์ที่ผูกอยู่ ${linkedChatOrders.length} รายการ ออกจากระบบ?`;
+              } else {
+                msg = `ลบ "${customer.name}" ออกจากระบบ?`;
+              }
+              if (!confirm(msg)) return;
+
+              try {
+                // 1) Delete all linked chat orders (always — they reference this customer)
+                for (const oid of linkedChatOrders) {
+                  const r = await fetch(`${API}/chat-orders/${oid}`, { method: "DELETE" });
+                  if (!r.ok) throw new Error(`ลบออเดอร์ ${oid} ไม่สำเร็จ (HTTP ${r.status})`);
+                }
+                // 2) Delete the customer row (skip for synthetic GUEST-* ids)
+                if (!isChatOnly) {
+                  const r = await fetch(`${API}/customers/${customer.id}`, { method: "DELETE" });
+                  if (!r.ok) throw new Error(`ลบลูกค้าไม่สำเร็จ (HTTP ${r.status})`);
+                }
+                if (window.logAudit) window.logAudit("delete_customer", "customer", customer.id, customer.name);
+                alert(`✅ ลบ "${customer.name}" เรียบร้อย` + (linkedChatOrders.length ? ` (+ ${linkedChatOrders.length} ออเดอร์)` : ""));
+                onSaved && onSaved();
+                onClose();
+              } catch (err) {
+                console.error("[delete customer]", err);
+                alert("❌ " + (err.message || "ลบไม่สำเร็จ — เช็ค console"));
+              }
             }}
               style={{ padding: "10px 16px", border: "1px solid #FFB3B3", color: "#C53030", background: "white", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
               🗑️ ลบลูกค้า
