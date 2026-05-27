@@ -274,41 +274,12 @@ async function seedDatabaseInternal() {
         "INSERT INTO stock (product_id, location_id, quantity) VALUES ('P012', 'ST-BKK', 3)",
         "INSERT INTO stock (product_id, location_id, quantity) VALUES ('P012', 'ST-CNX', 4)",
 
-        // Customers
-        "INSERT INTO customers (id, name, email, phone, tier, joined_date, points) VALUES ('C001', 'Napaporn S.', 'napaporn@example.com', '081-234-5678', 'gold', '2024-08-12', 1842)",
-        "INSERT INTO customers (id, name, email, phone, tier, joined_date, points) VALUES ('C002', 'Somchai K.', 'somchai@example.com', '089-876-5432', 'silver', '2025-01-04', 865)",
-        "INSERT INTO customers (id, name, email, phone, tier, joined_date, points) VALUES ('C003', 'Praewa T.', 'praewa@example.com', '062-555-0188', 'platinum', '2023-11-28', 5231)",
-        "INSERT INTO customers (id, name, email, phone, tier, joined_date, points) VALUES ('C004', 'Anan W.', 'anan@example.com', '094-444-2211', 'bronze', '2026-02-14', 189)",
-        "INSERT INTO customers (id, name, email, phone, tier, joined_date, points) VALUES ('C005', 'Kanya R.', 'kanya@example.com', '086-330-9911', 'gold', '2024-05-22', 1420)",
-
-        // Movements
-        "INSERT INTO movements (id, type, product_id, quantity, from_location_id, to_location_id, user_name, reference_id) VALUES ('MV-9912', 'in', 'P001', 50, NULL, 'WH-01', 'Admin', 'PUR-0421')",
-        "INSERT INTO movements (id, type, product_id, quantity, from_location_id, to_location_id, user_name, reference_id) VALUES ('MV-9910', 'transfer', 'P007', 20, 'WH-01', 'ST-BKK', 'Admin', 'TR-0188')",
-        "INSERT INTO movements (id, type, product_id, quantity, from_location_id, to_location_id, user_name, reference_id) VALUES ('MV-9908', 'in', 'P010', 200, NULL, 'WH-01', 'Admin', 'PUR-0420')",
-        "INSERT INTO movements (id, type, product_id, quantity, from_location_id, to_location_id, user_name, reference_id) VALUES ('MV-9904', 'transfer', 'P012', 15, 'ST-BKK', 'ST-CNX', 'Admin', 'TR-0187')",
-
-        // Orders
-        "INSERT INTO orders (id, customer_id, total_amount, status) VALUES ('ORD-001', 'C001', 2670, 'delivered')",
-        "INSERT INTO orders (id, customer_id, total_amount, status) VALUES ('ORD-002', 'C002', 3580, 'shipped')",
-        "INSERT INTO orders (id, customer_id, total_amount, status) VALUES ('ORD-003', 'C003', 5240, 'confirmed')",
-        "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ('ORD-001', 'P001', 2, 590)",
-        "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ('ORD-001', 'P005', 1, 690)",
-        "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ('ORD-002', 'P003', 1, 1290)",
-        "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ('ORD-003', 'P008', 1, 480)",
-
         // ===== Users (Owner / Manager / Staff) — passwords: owner123 / manager123 / staff123 =====
         `INSERT INTO users (username, password_hash, name, email, role, avatar) VALUES ('owner', '${hashPassword('owner123')}', 'สิริกร เจ้าของร้าน', 'owner@thinyshop.co', 'owner', 'SK')`,
         `INSERT INTO users (username, password_hash, name, email, role, avatar) VALUES ('manager', '${hashPassword('manager123')}', 'มณีรัตน์ ผู้จัดการ', 'manager@thinyshop.co', 'manager', 'MR')`,
         `INSERT INTO users (username, password_hash, name, email, role, avatar) VALUES ('staff', '${hashPassword('staff123')}', 'นัทธมน พนักงาน', 'staff@thinyshop.co', 'staff', 'NM')`,
         `INSERT INTO users (username, password_hash, name, email, role, avatar) VALUES ('staff2', '${hashPassword('staff123')}', 'อัครเดช พนักงาน', 'staff2@thinyshop.co', 'staff', 'AD')`,
 
-        // ===== Chat Orders (Pre-order) =====
-        "INSERT INTO chat_orders (id, platform, channel, customer_name, customer_phone, customer_address, customer_note, custom_item_name, custom_item_options, custom_item_qty, custom_item_price, subtotal, service_fee, total, source_tracking, source_cost, tracking, courier, payment_method, payment_status, status, last_message, created_at) VALUES ('CH-1043', 'shopee', 'line', 'ปริยา ม.', '0813334455', '100 ม.5 บางบัวทอง นนทบุรี 11110', 'ขอกล่องสวยๆ ให้ของขวัญ', 'Nike Air Max 90', 'Size 40 / สีดำ', 1, 3290, 3290, 80, 3370, '', 2890, '', '', 'transfer', 'paid', 'paid', 'อยากได้รองเท้าค่ะ สั่งให้ด้วยได้ไหม', '2026-05-21 09:15')",
-        "INSERT INTO chat_orders (id, platform, channel, customer_name, customer_phone, customer_address, custom_item_name, custom_item_qty, custom_item_price, subtotal, service_fee, total, source_tracking, source_cost, tracking, courier, payment_method, payment_status, status, last_message, created_at) VALUES ('CH-1042', 'shop', 'whatsapp', 'Pim Suwannee', '0812345678', '123/4 ซ.อารีย์ 5 พญาไท กรุงเทพฯ 10400', 'เซรั่มวิตามินซี 30ml', 3, 956, 2870, 0, 2870, 'SPX-2023-1144', 1440, 'TH99-1234-5678', 'Kerry', 'transfer', 'paid', 'arrived', 'ขอบคุณคะ รอรับของนะ 🙏', '2026-05-19 14:30')",
-        "INSERT INTO chat_orders (id, platform, channel, customer_name, customer_phone, customer_address, custom_item_name, custom_item_qty, custom_item_price, subtotal, service_fee, total, source_tracking, source_cost, payment_method, payment_status, status, last_message, created_at) VALUES ('CH-1041', 'shopee', 'facebook', 'Akira Wong', '0991234567', '88 ม.6 บางพลี สมุทรปราการ 10540', 'เสื้อโอเวอร์ไซส์ Linen', 1, 590, 590, 0, 590, 'SPX-9988-1122', 350, 'transfer', 'unpaid', 'awaitingPayment', 'ยังจ่ายอยู่นะ เดี๋ยวโอนเลย', '2026-05-19 13:12')",
-        "INSERT INTO chat_orders (id, platform, channel, customer_name, customer_phone, customer_address, customer_note, custom_item_name, custom_item_qty, custom_item_price, subtotal, service_fee, total, source_tracking, source_cost, tracking, courier, payment_method, payment_status, status, last_message, created_at) VALUES ('CH-1040', 'lazada', 'line', 'Nattaya R.', '0867789900', '55/1 รัชดา ดินแดง กรุงเทพฯ 10400', 'ใส่กล่องของขวัญด้วยน้า', 'เทียนหอม Cedar 200g', 3, 550, 1650, 0, 1650, 'LZD-2200-7788', 1100, 'FLE-4421-9012', 'Flash', 'cod', 'unpaid', 'arrived', 'ใช้บัตรเครดิตได้ไหมคะ?', '2026-05-19 11:55')",
-        "INSERT INTO chat_orders (id, platform, channel, customer_name, customer_phone, customer_address, custom_item_name, custom_item_qty, custom_item_price, subtotal, service_fee, total, payment_method, payment_status, status, last_message, created_at) VALUES ('CH-1039', 'shop', 'whatsapp', 'Kham Vongphachanh', '+8562012345678', '23 Ban Saphangmoh, Vientiane', 'สายชาร์จ USB-C Braided', 3, 290, 870, 0, 870, 'transfer', 'paid', 'paid', 'Got the tracking, thanks!', '2026-05-19 10:20')",
-        "INSERT INTO chat_orders (id, platform, channel, customer_name, customer_phone, customer_address, custom_item_name, custom_item_qty, custom_item_price, subtotal, service_fee, total, source_tracking, source_cost, payment_method, payment_status, status, last_message, created_at) VALUES ('CH-1038', 'tiktok', 'ig', '@phitchapha_', '0822334455', '12 อโศกมนตรี วัฒนา กรุงเทพฯ 10110', 'มาส์กแผ่น Hydrating x5', 4, 350, 1400, 0, 1400, 'TT-4455-8899', 900, 'transfer', 'unpaid', 'new', 'สนใจมาส์กแผ่นค่ะ มีของไหม', '2026-05-19 09:48')",
       ];
 
       // Execute all seed statements sequentially (works with both sqlite3 and libsql)

@@ -129,6 +129,8 @@ For "what should I do" questions, give numbered steps not paragraphs.
 - After commit + push: also update `## Recent changes` below
 
 ## Recent changes (newest first — keep last ~20)
+- **Real 14-day sales trend** — Dashboard now computes `SALES_TREND` inline from `CHAT_ORDERS` (paid/shipped/delivered/arrived) + POS `ORDERS` over the last 14 days ending today. Replaces the empty fallback. Chart hides if all 14 days = 0. admin-shell.jsx v44→45.
+- **Removed mock seed data everywhere** — user saw fake CH-1039..CH-1043 "ออเดอร์ล่าสุด" + ฿485,700 "ยอดขาย 14 วัน" on dashboard (mock fallback that triggers when ISP blocks Vercel API). Emptied `SALES_TREND`, `CHANNEL_SPLIT`, `PREORDERS`, `CHAT_ORDERS` consts + `MOVEMENTS`/`CUSTOMERS` in `getMockData()` in `src/data.js`. Removed customers/orders/order_items/movements/chat_orders seed inserts from `backend/init-db.js` (kept locations/products/stock/users seeds). Added empty-state guards in Dashboard ("ยังไม่มีข้อมูลยอดขาย" + "ยังไม่มีออเดอร์"). Created `backend/clear-mock-data.js` (gitignored) → deleted 4 mock customers (C001/C003/C004/C005) from Turso (rest were already gone). Bumped data.js v22→23, admin-shell.jsx v43→44.
 - **Mobile-responsive Dashboard grids** — KPI row + "สิ่งที่ต้องทำ" used `repeat(4, 1fr)` which squeezed text on mobile. Changed to `repeat(auto-fit, minmax(170px/140px, 1fr))` → wraps 2×2 on iPhone 14 Pro Max, 4×1 on desktop.
 - **Scanner speed boost** — `useBarCodeDetectorIfSupported: true` + `disableFlip: true` in both `admin-screens.jsx` ScreenScan and `admin-shell.jsx` MultiSellModal. Native API → 5-10× faster on Chrome/Edge.
 - **Camera scan in MultiSell** — small 📷 button next to product search input opens full-screen scanner overlay; matches barcode/SKU/id → addToCart + beep.

@@ -493,7 +493,40 @@ const AdminApp = ({ t, lang }) => {
 
 // ---------------- DASHBOARD ----------------
 const ScreenDashboard = ({ t, lang, goto }) => {
-  const { PRODUCTS, CHAT_ORDERS, CHANNELS, SALES_TREND } = window.THINY_DATA;
+  const { PRODUCTS, CHAT_ORDERS, CHANNELS, ORDERS } = window.THINY_DATA;
+
+  // === Compute 14-day sales trend from real orders (CHAT_ORDERS paid + POS ORDERS) ===
+  // Extracts YYYY-MM-DD from "2026-05-26 23:51" or ISO strings
+  const dayKey = (s) => (s || '').slice(0, 10);
+  const SALES_TREND = (() => {
+    const buckets = {}; // { "YYYY-MM-DD": { sales, orders } }
+    const addRow = (dateStr, total) => {
+      const k = dayKey(dateStr);
+      if (!k) return;
+      if (!buckets[k]) buckets[k] = { sales: 0, orders: 0 };
+      buckets[k].sales += Number(total) || 0;
+      buckets[k].orders += 1;
+    };
+    (CHAT_ORDERS || []).forEach(o => {
+      if (o.paymentStatus === 'paid' || o.status === 'shipped' || o.status === 'delivered' || o.status === 'paid' || o.status === 'arrived') {
+        addRow(o.created, o.total);
+      }
+    });
+    (ORDERS || []).forEach(o => addRow(o.date, o.total));
+
+    // Build last-14-days series ending today
+    const out = [];
+    const today = new Date();
+    for (let i = 13; i >= 0; i--) {
+      const dt = new Date(today);
+      dt.setDate(today.getDate() - i);
+      const k = dt.toISOString().slice(0, 10);
+      const b = buckets[k] || { sales: 0, orders: 0 };
+      out.push({ d: String(dt.getDate()).padStart(2, '0'), sales: b.sales, orders: b.orders });
+    }
+    // Hide chart entirely if there's no sales in the whole window
+    return out.some(x => x.sales > 0) ? out : [];
+  })();
 
   // === Compute pre-order metrics ===
   const todayStr = "2026-05-21"; // today (matches sample data)
@@ -782,7 +815,10 @@ const ScreenDashboard = ({ t, lang, goto }) => {
             <div style={{ fontWeight: 700, fontSize: 15 }}>📈 ยอดขาย 14 วัน</div>
             <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{fmtMoney(SALES_TREND.reduce((a, b) => a + b.sales, 0), lang)} รวม · {SALES_TREND.reduce((a, b) => a + b.orders, 0)} ออเดอร์</div>
           </div>
-          <BarChart data={SALES_TREND.map((d, i) => ({ l: d.d, v: d.sales, hl: i === SALES_TREND.length - 1 }))} height={180} accent="var(--c-accent)" />
+          {SALES_TREND.length > 0
+            ? <BarChart data={SALES_TREND.map((d, i) => ({ l: d.d, v: d.sales, hl: i === SALES_TREND.length - 1 }))} height={180} accent="var(--c-accent)" />
+            : <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa", fontSize: 13 }}>ยังไม่มีข้อมูลยอดขาย</div>
+          }
         </div>
 
         {/* Recent orders */}
@@ -795,6 +831,9 @@ const ScreenDashboard = ({ t, lang, goto }) => {
             <button onClick={() => goto("chatOrders")} className="thiny-link" style={{ fontSize: 12 }}>ดูทั้งหมด →</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {recentOrders.length === 0 && (
+              <div style={{ padding: "32px 0", textAlign: "center", color: "#aaa", fontSize: 13 }}>ยังไม่มีออเดอร์</div>
+            )}
             {recentOrders.map(o => {
               const plat = CHANNELS.find(c => c.id === o.platform);
               return (
